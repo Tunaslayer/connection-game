@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Connection Game</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #0f0f1a;
+  color: #e0e0f0;
+  font-family: 'Segoe UI', Arial, sans-serif;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 14px;
+  gap: 10px;
+  user-select: none;
+}
+h1 {
+  font-size: 1.5rem;
+  color: #b0b0e0;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+}
+#status {
+  font-size: 0.95rem;
+  padding: 5px 18px;
+  border-radius: 20px;
+  font-weight: 600;
+  text-align: center;
+}
+.p1-bg  { background: #1a2a5a; color: #7ab4ff; border: 2px solid #3a6add; }
+.p2-bg  { background: #5a1a1a; color: #ff8080; border: 2px solid #dd3a3a; }
+.win-bg { background: #1a4a1a; color: #80ff80; border: 2px solid #3add3a; }
+#game-layout {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+.player-panel {
+  width: 182px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: opacity 0.3s;
+}
+.panel-title {
+  text-align: center;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 5px 8px;
+  border-radius: 6px;
+  line-height: 1.55;
+}
+.capture-score {
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 3px 6px;
+  border-radius: 5px;
+  background: #12122a;
+  border: 1px solid #2a2a4a;
+  color: #aaaacc;
+  letter-spacing: 1px;
+}
+.capture-score span { font-size: 1rem; font-weight: 800; }
+.pieces-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: center;
+  max-height: 530px;
+  overflow-y: auto;
+  padding: 2px;
+}
+.pieces-grid::-webkit-scrollbar { width: 4px; }
+.pieces-grid::-webkit-scrollbar-thumb { background: #3a3a66; border-radius: 2px; }
+.piece-btn {
+  background: #1e1e35;
+  border: 2px solid #333355;
+  border-radius: 5px;
+  cursor: pointer;
+  padding: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.12s, background 0.12s;
+  position: relative;
+}
+.piece-count {
+  position: absolute;
+  top: 1px; right: 3px;
+  font-size: 0.58rem;
+  font-weight: 800;
+  color: #ffdd44;
+  line-height: 1;
+  pointer-events: none;
+}
+.piece-btn:hover:not(.used):not(.inactive) { border-color: #7777bb; }
+.piece-btn.selected { border-color: #ffdd00; background: #252510; }
+.piece-btn.used { opacity: 0.18; cursor: default; }
+.piece-btn.inactive { cursor: default; }
+#board-area { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+#board-canvas { cursor: crosshair; display: block; }
+#controls { display: flex; gap: 8px; }
+.ctrl-btn {
+  padding: 5px 13px;
+  border: 2px solid #333366;
+  border-radius: 5px;
+  background: #1e1e35;
+  color: #c0c0f0;
+  cursor: pointer;
+  font-size: 0.82rem;
+  transition: background 0.12s;
+}
+.ctrl-btn:hover { background: #252545; border-color: #5555aa; }
+#instructions {
+  font-size: 0.7rem;
+  color: #666;
+  text-align: center;
+}
+#overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.82);
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+#overlay.show { display: flex; }
+#win-box {
+  background: #15152e;
+  border: 3px solid #4a4aaa;
+  border-radius: 14px;
+  padding: 40px 55px;
+  text-align: center;
+}
+#win-title { font-size: 2rem; font-weight: 800; margin-bottom: 10px; }
+#win-sub   { font-size: 1rem; color: #aaa; margin-bottom: 24px; }
+.again-btn {
+  padding: 10px 28px;
+  background: #3a3a88;
+  border: none;
+  border-radius: 8px;
+  color: #eee;
+  font-size: 1rem;
+  cursor: pointer;
+}
+.again-btn:hover { background: #5a5aaa; }
+</style>
+</head>
+<body>
+
+<h1>Connection Game</h1>
+<div id="status" class="p1-bg">Player 1&rsquo;s Turn</div>
+
+<div id="game-layout">
+
+  <div class="player-panel" id="p1-panel">
+    <div class="panel-title p1-bg">&#9646; Player 1 &mdash; Blue<br>Connect Top &#8597; Bottom</div>
+    <div class="capture-score" id="p1-score">Captured: <span>0</span> cells</div>
+    <div class="pieces-grid" id="p1-pieces"></div>
+  </div>
+
+  <div id="board-area">
+    <canvas id="board-canvas"></canvas>
+    <div id="controls">
+      <button class="ctrl-btn" id="btn-rotate">&#8635; Rotate &nbsp;[R]</button>
+      <button class="ctrl-btn" id="btn-flip">&#8644; Flip &nbsp;[F]</button>
+      <button class="ctrl-btn" id="btn-pass">&#9197; Pass Turn</button>
+    </div>
+  </div>
+
+  <div class="player-panel" id="p2-panel">
+    <div class="panel-title p2-bg">&#9646; Player 2 &mdash; Red<br>Connect Left &#8596; Right</div>
+    <div class="capture-score" id="p2-score">Captured: <span>0</span> cells</div>
+    <div class="pieces-grid" id="p2-pieces"></div>
+  </div>
+
+</div>
+
+<div id="instructions">
+  Blue wins: Top&updownarrow;Bottom &nbsp;&bull;&nbsp; Red wins: Left&harr;Right &nbsp;&bull;&nbsp;
+  Capture: cover both tag ends (cells beyond each tip) of an opponent group &nbsp;&bull;&nbsp;
+  R = Rotate &nbsp;&bull;&nbsp; F = Flip
+</div>
+
+<div id="overlay">
+  <div id="win-box">
+    <div id="win-title"></div>
+    <div id="win-sub"></div>
+    <button class="again-btn" onclick="restart()">Play Again</button>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+const CS   = 27;        // cell size in pixels
+const N    = 20;        // board dimension (20×20)
+const SZ   = CS * N;    // canvas size in pixels
+const MINI = 9;         // mini-cell size for piece panel previews
+
+const P1C  = '#3a7bd5';
+const P2C  = '#e74c3c';
+const P1CL = 'rgba(58,123,213,0.52)';
+const P2CL = 'rgba(231,76,60,0.52)';
+const CBAD = 'rgba(255,50,50,0.38)';
+const CEMPTY = '#13132a';
+const CGRID  = '#202038';
+
+// ─── Piece Definitions ────────────────────────────────────────────────────────
+// Squares as [row, col] offsets, top-left normalised to (0,0).
+// Rotation and flip are applied at runtime so mirrors need not be listed twice.
+const DEFS = [
+  // ── 4-square (tetrominoes) ────────────────────────────────────────────────
+  { id:'I4',   sq:[[0,0],[0,1],[0,2],[0,3]] },
+  { id:'O4',   sq:[[0,0],[0,1],[1,0],[1,1]] },
+  { id:'T4',   sq:[[0,0],[0,1],[0,2],[1,1]] },
+  { id:'S4',   sq:[[0,1],[0,2],[1,0],[1,1]] },
+  { id:'Z4',   sq:[[0,0],[0,1],[1,1],[1,2]] },
+  { id:'L4',   sq:[[0,0],[1,0],[2,0],[2,1]] },
+  { id:'J4',   sq:[[0,1],[1,1],[2,0],[2,1]] },
+
+  // ── 5-square (pentominoes) — all 12 free shapes ───────────────────────────
+  { id:'F5',   sq:[[0,1],[0,2],[1,0],[1,1],[2,1]] },
+  { id:'I5',   sq:[[0,0],[0,1],[0,2],[0,3],[0,4]] },
+  { id:'L5',   sq:[[0,0],[1,0],[2,0],[3,0],[3,1]] },
+  { id:'N5',   sq:[[0,1],[1,0],[1,1],[2,0],[3,0]] },
+  { id:'P5',   sq:[[0,0],[0,1],[1,0],[1,1],[2,0]] },
+  { id:'T5',   sq:[[0,0],[0,1],[0,2],[1,1],[2,1]] },
+  { id:'U5',   sq:[[0,0],[0,2],[1,0],[1,1],[1,2]] },
+  { id:'V5',   sq:[[0,0],[1,0],[2,0],[2,1],[2,2]] },
+  { id:'W5',   sq:[[0,0],[1,0],[1,1],[2,1],[2,2]] },
+  { id:'X5',   sq:[[0,1],[1,0],[1,1],[1,2],[2,1]] },
+  { id:'Y5',   sq:[[0,1],[1,0],[1,1],[2,1],[3,1]] },
+  { id:'Z5',   sq:[[0,0],[0,1],[1,1],[2,1],[2,2]] },
+];
+
+// ─── Game State ───────────────────────────────────────────────────────────────
+let board, pieceBoard, placements, cur, hand, selId, rot, flp, hR, hC, gameOver, passStreak, captures;
+
+function resetState() {
+  board      = Array.from({length:N}, () => new Uint8Array(N));
+  pieceBoard = Array.from({length:N}, () => Array(N).fill(-1)); // placement index per cell
+  placements = [];                                               // [{player, pieceId}]
+  cur        = 1;
+  hand       = { 1: DEFS.map(d => d.id), 2: DEFS.map(d => d.id) }; // multiset of available pieces
+  selId      = null;
+  rot        = 0;
+  flp        = false;
+  hR         = -1;
+  hC         = -1;
+  gameOver   = false;
+  passStreak = 0;
+  captures   = { 1: 0, 2: 0 };
+}
+
+// ─── Piece Transforms ─────────────────────────────────────────────────────────
+function norm(sqs) {
+  const mr = Math.min(...sqs.map(s => s[0]));
+  const mc = Math.min(...sqs.map(s => s[1]));
+  return sqs.map(([r,c]) => [r - mr, c - mc]);
+}
+function rotateCW(sqs) { return norm(sqs.map(([r,c]) => [c, -r])); }
+function flipH(sqs)     { return norm(sqs.map(([r,c]) => [r, -c])); }
+
+function transform(id, r, f) {
+  let sqs = DEFS.find(d => d.id === id).sq.map(s => [...s]);
+  if (f) sqs = flipH(sqs);
+  for (let i = 0; i < (r % 4); i++) sqs = rotateCW(sqs);
+  return norm(sqs);
+}
+
+// ─── Placement ────────────────────────────────────────────────────────────────
+function getAnchor(id, r, f, mR, mC) {
+  const sqs  = transform(id, r, f);
+  const maxR = Math.max(...sqs.map(s => s[0]));
+  const maxC = Math.max(...sqs.map(s => s[1]));
+  return [mR - Math.round(maxR / 2), mC - Math.round(maxC / 2)];
+}
+
+function getSquares(id, r, f, aR, aC) {
+  return transform(id, r, f).map(([dr, dc]) => [aR + dr, aC + dc]);
+}
+
+function canPlace(sqs) {
+  for (const [r,c] of sqs)
+    if (r < 0 || r >= N || c < 0 || c >= N || board[r][c] !== 0) return false;
+  return true;
+}
+
+function doPlace(sqs, player, pidx) {
+  for (const [r,c] of sqs) { board[r][c] = player; pieceBoard[r][c] = pidx; }
+}
+
+// ─── Capture (tag-end rule) ───────────────────────────────────────────────────
+// For a connected group of opponent cells, a "tag end" is the cell directly
+// beyond each endpoint (degree-1 cell) of the group, in the extension direction.
+// Example: for I3 at cols 3-4-5, the tag ends are col 2 and col 6.
+// The group is captured when the attacker's pieces occupy EVERY in-bounds tag end.
+// (Mono pieces have no tag ends and cannot be captured this way.)
+
+function getTagEnds(group) {
+  const cellSet = new Set(group.map(([r,c]) => r * N + c));
+  const D = [[1,0],[-1,0],[0,1],[0,-1]];
+  const tagEnds = [];
+  for (const [r, c] of group) {
+    const pieceNbrs = D.map(([dr,dc]) => [r+dr, c+dc])
+                       .filter(([nr,nc]) => cellSet.has(nr * N + nc));
+    if (pieceNbrs.length === 1) {           // this cell is an endpoint
+      const [nr, nc] = pieceNbrs[0];
+      const tr = r + (r - nr);             // cell directly opposite, extending out
+      const tc = c + (c - nc);
+      if (tr >= 0 && tr < N && tc >= 0 && tc < N)
+        tagEnds.push([tr, tc]);
+    }
+  }
+  return tagEnds;
+}
+
+function checkCaptures(attacker, opponent) {
+  const vis = Array.from({length:N}, () => new Uint8Array(N));
+  let total = 0;
+  const D = [[1,0],[-1,0],[0,1],[0,-1]];
+  for (let r = 0; r < N; r++) {
+    for (let c = 0; c < N; c++) {
+      if (board[r][c] !== opponent || vis[r][c]) continue;
+      const group = [], q = [[r, c]];
+      vis[r][c] = 1;
+      for (let i = 0; i < q.length; i++) {
+        const [gr, gc] = q[i];
+        group.push([gr, gc]);
+        for (const [dr, dc] of D) {
+          const nr = gr+dr, nc = gc+dc;
+          if (nr >= 0 && nr < N && nc >= 0 && nc < N &&
+              board[nr][nc] === opponent && !vis[nr][nc]) {
+            vis[nr][nc] = 1; q.push([nr, nc]);
+          }
+        }
+      }
+      const tagEnds = getTagEnds(group);
+      // Capture if there is at least one tag end and attacker covers all of them
+      if (tagEnds.length > 0 &&
+          tagEnds.every(([tr, tc]) => board[tr][tc] === attacker)) {
+        // Collect the distinct placement indices in this group
+        const capturedPidxs = new Set(group.map(([gr,gc]) => pieceBoard[gr][gc]));
+        for (const [gr, gc] of group) { board[gr][gc] = 0; pieceBoard[gr][gc] = -1; total++; }
+        // Return each captured piece to the attacker's hand
+        for (const pidx of capturedPidxs)
+          if (pidx >= 0) hand[attacker].push(placements[pidx].pieceId);
+      }
+    }
+  }
+  return total;
+}
+
+// ─── Win Detection (BFS) ──────────────────────────────────────────────────────
+// Either player wins by connecting Top↔Bottom OR Left↔Right.
+function bfsEdge(p, topBottom) {
+  const vis = Array.from({length:N}, () => new Uint8Array(N));
+  const q   = [];
+  if (topBottom) {
+    for (let c = 0; c < N; c++)
+      if (board[0][c] === p) { vis[0][c] = 1; q.push([0, c]); }
+  } else {
+    for (let r = 0; r < N; r++)
+      if (board[r][0] === p) { vis[r][0] = 1; q.push([r, 0]); }
+  }
+  const D = [[1,0],[-1,0],[0,1],[0,-1]];
+  for (let i = 0; i < q.length; i++) {
+    const [r, c] = q[i];
+    if (topBottom  && r === N - 1) return true;
+    if (!topBottom && c === N - 1) return true;
+    for (const [dr, dc] of D) {
+      const nr = r + dr, nc = c + dc;
+      if (nr >= 0 && nr < N && nc >= 0 && nc < N && !vis[nr][nc] && board[nr][nc] === p) {
+        vis[nr][nc] = 1;
+        q.push([nr, nc]);
+      }
+    }
+  }
+  return false;
+}
+
+// P1 must connect Top↔Bottom; P2 must connect Left↔Right.
+// This mirrors Hex — draws are impossible if the board fills.
+function getWin(p) {
+  if (p === 1 && bfsEdge(1, true))  return 'tb';
+  if (p === 2 && bfsEdge(2, false)) return 'lr';
+  return null;
+}
+
+// ─── Canvas ───────────────────────────────────────────────────────────────────
+const canvas = document.getElementById('board-canvas');
+canvas.width = canvas.height = SZ;
+const ctx = canvas.getContext('2d');
+
+function drawBoard() {
+  ctx.fillStyle = '#0d0d1e';
+  ctx.fillRect(0, 0, SZ, SZ);
+
+  // Blue edges = top & bottom; Red edges = left & right
+  ctx.fillStyle = 'rgba(58,123,213,0.13)';
+  ctx.fillRect(0, 0, SZ, CS);
+  ctx.fillRect(0, SZ - CS, SZ, CS);
+  ctx.fillStyle = 'rgba(231,76,60,0.13)';
+  ctx.fillRect(0, CS, CS, SZ - CS * 2);
+  ctx.fillRect(SZ - CS, CS, CS, SZ - CS * 2);
+
+  // Cells
+  for (let r = 0; r < N; r++) {
+    for (let c = 0; c < N; c++) {
+      const v = board[r][c];
+      ctx.fillStyle = v === 1 ? P1C : v === 2 ? P2C : CEMPTY;
+      ctx.fillRect(c * CS + 1, r * CS + 1, CS - 2, CS - 2);
+    }
+  }
+
+  // Grid lines
+  ctx.strokeStyle = 'rgba(255,255,255,0.80)';
+  ctx.lineWidth = 0.8;
+  for (let i = 0; i <= N; i++) {
+    ctx.beginPath(); ctx.moveTo(i * CS, 0);  ctx.lineTo(i * CS, SZ); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, i * CS);  ctx.lineTo(SZ, i * CS); ctx.stroke();
+  }
+
+  // Hover preview
+  if (selId && hR >= 0 && !gameOver) {
+    const [aR, aC] = getAnchor(selId, rot, flp, hR, hC);
+    const sqs = getSquares(selId, rot, flp, aR, aC);
+    const ok  = canPlace(sqs);
+    ctx.fillStyle = ok ? (cur === 1 ? P1CL : P2CL) : CBAD;
+    for (const [r, c] of sqs) {
+      if (r >= 0 && r < N && c >= 0 && c < N)
+        ctx.fillRect(c * CS + 1, r * CS + 1, CS - 2, CS - 2);
+    }
+  }
+
+  // Edge labels — Blue=Top/Bottom, Red=Left/Right
+  ctx.font = 'bold 10px Segoe UI';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = 'rgba(58,123,213,0.75)';
+  ctx.fillText('▲ BLUE ▲', SZ / 2, CS / 2);
+  ctx.fillText('▼ BLUE ▼', SZ / 2, SZ - CS / 2);
+  ctx.fillStyle = 'rgba(231,76,60,0.75)';
+  ctx.save(); ctx.translate(CS / 2, SZ / 2); ctx.rotate(-Math.PI / 2);
+  ctx.fillText('◄ RED ◄', 0, 0);
+  ctx.restore();
+  ctx.save(); ctx.translate(SZ - CS / 2, SZ / 2); ctx.rotate(Math.PI / 2);
+  ctx.fillText('► RED ►', 0, 0);
+  ctx.restore();
+
+  // Board border
+  ctx.strokeStyle = '#3a3a6a';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(0, 0, SZ, SZ);
+}
+
+// ─── Mini Piece Renderer ──────────────────────────────────────────────────────
+function renderMini(cnv, sqs, color, dimmed) {
+  const maxR = sqs.length ? Math.max(...sqs.map(s => s[0])) : 0;
+  const maxC = sqs.length ? Math.max(...sqs.map(s => s[1])) : 0;
+  const pad  = 2;
+  cnv.width  = (maxC + 1) * MINI + pad * 2;
+  cnv.height = (maxR + 1) * MINI + pad * 2;
+  const c = cnv.getContext('2d');
+  c.clearRect(0, 0, cnv.width, cnv.height);
+  c.fillStyle = dimmed ? '#2a2a40' : color;
+  for (const [r, col] of sqs)
+    c.fillRect(pad + col * MINI, pad + r * MINI, MINI - 1, MINI - 1);
+}
+
+// ─── Piece Panels ─────────────────────────────────────────────────────────────
+function buildPanels() {
+  for (const p of [1, 2]) {
+    const cont = document.getElementById(`p${p}-pieces`);
+    cont.innerHTML = '';
+    for (const def of DEFS) {
+      const btn = document.createElement('div');
+      btn.className      = 'piece-btn';
+      btn.dataset.pid    = def.id;
+      btn.dataset.player = p;
+      const cnv = document.createElement('canvas');
+      renderMini(cnv, transform(def.id, 0, false), p === 1 ? P1C : P2C, false);
+      btn.appendChild(cnv);
+      const badge = document.createElement('span');
+      badge.className = 'piece-count';
+      btn.appendChild(badge);
+      btn.addEventListener('click', () => onPieceClick(p, def.id));
+      cont.appendChild(btn);
+    }
+  }
+}
+
+function refreshPanels() {
+  for (const p of [1, 2]) {
+    document.getElementById(`p${p}-panel`).style.opacity = p === cur ? '1' : '0.42';
+    document.getElementById(`p${p}-pieces`).querySelectorAll('.piece-btn').forEach(btn => {
+      const id    = btn.dataset.pid;
+      const isP   = parseInt(btn.dataset.player);
+      const count = hand[isP].filter(x => x === id).length;
+      const isSel = id === selId && isP === cur;
+      const sqs   = transform(id, isSel ? rot : 0, isSel ? flp : false);
+      btn.classList.toggle('used',     count === 0);
+      btn.classList.toggle('selected', isSel);
+      btn.classList.toggle('inactive', isP !== cur);
+      renderMini(btn.querySelector('canvas'), sqs, isP === 1 ? P1C : P2C, count === 0);
+      const badge = btn.querySelector('.piece-count');
+      badge.textContent = count > 1 ? `×${count}` : '';
+    });
+  }
+}
+
+function refreshScores() {
+  for (const p of [1, 2]) {
+    const span = document.querySelector(`#p${p}-score span`);
+    if (span) span.textContent = captures[p];
+  }
+}
+
+function onPieceClick(p, id) {
+  if (gameOver || p !== cur || hand[p].filter(x => x === id).length === 0) return;
+  selId = selId === id ? null : id;
+  if (selId) { rot = 0; flp = false; }
+  refreshPanels();
+  drawBoard();
+}
+
+// ─── Board Events ─────────────────────────────────────────────────────────────
+canvas.addEventListener('mousemove', e => {
+  const r = canvas.getBoundingClientRect();
+  hR = Math.floor((e.clientY - r.top)  / CS);
+  hC = Math.floor((e.clientX - r.left) / CS);
+  drawBoard();
+});
+
+canvas.addEventListener('mouseleave', () => { hR = hC = -1; drawBoard(); });
+
+canvas.addEventListener('click', e => {
+  if (gameOver || !selId) return;
+  const r   = canvas.getBoundingClientRect();
+  const mR  = Math.floor((e.clientY - r.top)  / CS);
+  const mC  = Math.floor((e.clientX - r.left) / CS);
+  const [aR, aC] = getAnchor(selId, rot, flp, mR, mC);
+  const sqs = getSquares(selId, rot, flp, aR, aC);
+  if (!canPlace(sqs)) return;
+
+  const pidx = placements.length;
+  placements.push({ player: cur, pieceId: selId });
+  doPlace(sqs, cur, pidx);
+  const hi = hand[cur].indexOf(selId);
+  if (hi !== -1) hand[cur].splice(hi, 1);
+  selId = null; rot = 0; flp = false;
+  passStreak = 0;
+
+  const cap = checkCaptures(cur, cur === 1 ? 2 : 1);
+  if (cap > 0) { captures[cur] += cap; refreshScores(); }
+
+  const winDir = getWin(cur);
+  if (winDir) { showWin(cur, winDir); return; }
+
+  cur = cur === 1 ? 2 : 1;
+  setStatus();
+  refreshPanels();
+  drawBoard();
+});
+
+// ─── Controls ─────────────────────────────────────────────────────────────────
+document.getElementById('btn-rotate').onclick = () => {
+  if (!selId || gameOver) return;
+  rot = (rot + 1) % 4;
+  refreshPanels(); drawBoard();
+};
+
+document.getElementById('btn-flip').onclick = () => {
+  if (!selId || gameOver) return;
+  flp = !flp;
+  refreshPanels(); drawBoard();
+};
+
+document.getElementById('btn-pass').onclick = () => {
+  if (gameOver) return;
+  selId = null; rot = 0; flp = false;
+  passStreak++;
+  if (passStreak >= 2) { showDraw(); return; }
+  cur = cur === 1 ? 2 : 1;
+  setStatus(); refreshPanels(); drawBoard();
+};
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'r' || e.key === 'R') document.getElementById('btn-rotate').click();
+  if (e.key === 'f' || e.key === 'F') document.getElementById('btn-flip').click();
+});
+
+// ─── Status Bar ───────────────────────────────────────────────────────────────
+function setStatus() {
+  const el = document.getElementById('status');
+  el.innerHTML = cur === 1
+    ? "Player 1&rsquo;s Turn &mdash; Blue"
+    : "Player 2&rsquo;s Turn &mdash; Red";
+  el.className = cur === 1 ? 'p1-bg' : 'p2-bg';
+}
+
+// ─── Win / Draw ───────────────────────────────────────────────────────────────
+function showWin(p, dir) {
+  gameOver = true;
+  const dirLabel = dir === 'tb' ? 'Top to Bottom' : 'Left to Right';
+  const title    = document.getElementById('win-title');
+  title.style.color = p === 1 ? '#7ab4ff' : '#ff8080';
+  title.textContent = `Player ${p} Wins!`;
+  document.getElementById('win-sub').textContent =
+    `${p === 1 ? 'Blue' : 'Red'} connected ${dirLabel}!`;
+  document.getElementById('overlay').classList.add('show');
+  const el = document.getElementById('status');
+  el.textContent = `Player ${p} Wins!`;
+  el.className = 'win-bg';
+  drawBoard();
+}
+
+function showDraw() {
+  gameOver = true;
+  const title = document.getElementById('win-title');
+  title.style.color = '#dddd80';
+  title.textContent = 'Draw!';
+  document.getElementById('win-sub').textContent = 'Both players passed — no winner.';
+  document.getElementById('overlay').classList.add('show');
+  const el = document.getElementById('status');
+  el.textContent = 'Draw!';
+  el.className = 'win-bg';
+}
+
+// ─── Restart ──────────────────────────────────────────────────────────────────
+function restart() {
+  document.getElementById('overlay').classList.remove('show');
+  resetState();
+  setStatus();
+  buildPanels();
+  refreshPanels();
+  refreshScores();
+  drawBoard();
+}
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+resetState();
+setStatus();
+buildPanels();
+refreshPanels();
+drawBoard();
+</script>
+</body>
+</html
