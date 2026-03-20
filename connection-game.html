@@ -1,0 +1,1663 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Connection Game</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #0f0f1a;
+  color: #e0e0f0;
+  font-family: 'Segoe UI', Arial, sans-serif;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 14px;
+  gap: 10px;
+  user-select: none;
+}
+h1 {
+  font-size: 1.5rem;
+  color: #b0b0e0;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+}
+#status {
+  font-size: 0.95rem;
+  padding: 5px 18px;
+  border-radius: 20px;
+  font-weight: 600;
+  text-align: center;
+}
+.p1-bg  { background: #1a2a5a; color: #7ab4ff; border: 2px solid #3a6add; }
+.p2-bg  { background: #5a1a1a; color: #ff8080; border: 2px solid #dd3a3a; }
+.win-bg { background: #1a4a1a; color: #80ff80; border: 2px solid #3add3a; }
+.think-bg { background: #2a1a4a; color: #cc99ff; border: 2px solid #7744cc; }
+
+/* ── Mode bar ── */
+#mode-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.mode-label {
+  font-size: 0.72rem;
+  color: #777;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.mode-btn, .diff-btn {
+  padding: 4px 12px;
+  border: 2px solid #333366;
+  border-radius: 5px;
+  background: #1e1e35;
+  color: #9090c0;
+  cursor: pointer;
+  font-size: 0.78rem;
+  transition: background 0.12s;
+}
+.mode-btn:hover, .diff-btn:hover { background: #252545; }
+.mode-btn.active, .diff-btn.active {
+  border-color: #6666cc;
+  background: #2a2a55;
+  color: #d0d0ff;
+}
+#diff-group {
+  display: none;
+  align-items: center;
+  gap: 6px;
+}
+
+#game-layout {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+.player-panel {
+  width: 182px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: opacity 0.3s;
+}
+.panel-title {
+  text-align: center;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 5px 8px;
+  border-radius: 6px;
+  line-height: 1.55;
+}
+.capture-score {
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 3px 6px;
+  border-radius: 5px;
+  background: #12122a;
+  border: 1px solid #2a2a4a;
+  color: #aaaacc;
+  letter-spacing: 1px;
+}
+.capture-score span { font-size: 1rem; font-weight: 800; }
+.pieces-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: center;
+  max-height: 530px;
+  overflow-y: auto;
+  padding: 2px;
+}
+.pieces-grid::-webkit-scrollbar { width: 4px; }
+.pieces-grid::-webkit-scrollbar-thumb { background: #3a3a66; border-radius: 2px; }
+.piece-btn {
+  background: #1e1e35;
+  border: 2px solid #333355;
+  border-radius: 5px;
+  cursor: pointer;
+  padding: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.12s, background 0.12s;
+  position: relative;
+}
+.piece-count {
+  position: absolute;
+  top: 1px; right: 3px;
+  font-size: 0.58rem;
+  font-weight: 800;
+  color: #ffdd44;
+  line-height: 1;
+  pointer-events: none;
+}
+.piece-btn:hover:not(.used):not(.inactive) { border-color: #7777bb; }
+.piece-btn.selected { border-color: #ffdd00; background: #252510; }
+.piece-btn.used { opacity: 0.18; cursor: default; }
+.piece-btn.inactive { cursor: default; }
+#board-area { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+#board-canvas { cursor: crosshair; display: block; }
+#controls { display: flex; gap: 8px; }
+.ctrl-btn {
+  padding: 5px 13px;
+  border: 2px solid #333366;
+  border-radius: 5px;
+  background: #1e1e35;
+  color: #c0c0f0;
+  cursor: pointer;
+  font-size: 0.82rem;
+  transition: background 0.12s;
+}
+.ctrl-btn:hover { background: #252545; border-color: #5555aa; }
+#instructions {
+  font-size: 0.7rem;
+  color: #666;
+  text-align: center;
+}
+#win-banner {
+  display: none;
+  align-items: center;
+  gap: 14px;
+  padding: 6px 20px;
+  border-radius: 20px;
+  border: 2px solid #6666cc;
+  background: #1a1a40;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+#win-banner.show { display: flex; }
+#win-banner-msg  { font-size: 0.95rem; font-weight: 700; }
+.again-btn {
+  padding: 5px 18px;
+  background: #3a3a88;
+  border: none;
+  border-radius: 8px;
+  color: #eee;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+.again-btn:hover { background: #5a5aaa; }
+
+/* ── Tutorial Modal ── */
+#tutorial-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.74);
+  z-index: 100;
+  justify-content: center;
+  align-items: center;
+  padding: 16px;
+}
+#tutorial-box {
+  background: #13132a;
+  border: 2px solid #3a3a6a;
+  border-radius: 12px;
+  max-width: 620px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+#tutorial-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 20px 10px;
+  border-bottom: 1px solid #2a2a4a;
+  position: sticky;
+  top: 0;
+  background: #13132a;
+  z-index: 1;
+}
+#tutorial-header span {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #c0c0f0;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+#tutorial-close {
+  background: none;
+  border: none;
+  color: #777;
+  font-size: 1.25rem;
+  cursor: pointer;
+  line-height: 1;
+  padding: 2px 7px;
+  border-radius: 4px;
+}
+#tutorial-close:hover { color: #eee; background: #252545; }
+#tutorial-body {
+  padding: 16px 20px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.tut-section h3 {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: #6666aa;
+  margin-bottom: 9px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #1e1e3a;
+}
+.tut-section p {
+  font-size: 0.82rem;
+  color: #aaaacc;
+  line-height: 1.65;
+  margin-bottom: 8px;
+}
+.tut-section p:last-child { margin-bottom: 0; }
+.tut-goals {
+  display: flex;
+  gap: 12px;
+  margin-top: 4px;
+}
+.tut-goal {
+  flex: 1;
+  padding: 9px 12px;
+  border-radius: 7px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-align: center;
+  line-height: 1.5;
+}
+.tut-goal.blue { background: #1a2a5a; color: #7ab4ff; border: 1px solid #3a6add; }
+.tut-goal.red  { background: #5a1a1a; color: #ff8080; border: 1px solid #dd3a3a; }
+#capture-diagram {
+  display: block;
+  margin: 12px auto 0;
+  border-radius: 6px;
+  max-width: 100%;
+}
+.tut-legend {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+  font-size: 0.75rem;
+  color: #888;
+}
+.tut-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.tut-swatch {
+  width: 12px; height: 12px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+</style>
+</head>
+<body>
+
+<h1>Connection Game</h1>
+<div id="status" class="p1-bg">Player 1&rsquo;s Turn</div>
+<div id="win-banner">
+  <span id="win-banner-msg"></span>
+  <button class="again-btn" onclick="restart()">Play Again</button>
+</div>
+
+<!-- Mode / difficulty bar -->
+<div id="mode-bar">
+  <span class="mode-label">Mode:</span>
+  <button class="mode-btn active" id="btn-pvp" onclick="setMode('pvp')">&#128101; 2 Players</button>
+  <button class="mode-btn"        id="btn-pvc" onclick="setMode('pvc')">&#129302; vs Computer</button>
+  <span id="diff-group">
+    <span class="mode-label">Difficulty:</span>
+    <button class="diff-btn active" id="btn-easy"   onclick="setDiff('easy')">Easy</button>
+    <button class="diff-btn"        id="btn-medium" onclick="setDiff('medium')">Medium</button>
+    <button class="diff-btn"        id="btn-hard"   onclick="setDiff('hard')">Hard</button>
+  </span>
+</div>
+
+<div id="game-layout">
+
+  <div class="player-panel" id="p1-panel">
+    <div class="panel-title p1-bg" id="p1-title">&#9646; Player 1 &mdash; Blue<br>Connect Top &#8597; Bottom</div>
+    <div class="capture-score" id="p1-score">Captured: <span>0</span> cells</div>
+    <div class="pieces-grid" id="p1-pieces"></div>
+  </div>
+
+  <div id="board-area">
+    <canvas id="board-canvas"></canvas>
+    <div id="controls">
+      <button class="ctrl-btn" id="btn-rotate">&#8635; Rotate &nbsp;[R]</button>
+      <button class="ctrl-btn" id="btn-flip">&#8644; Flip &nbsp;[F]</button>
+      <button class="ctrl-btn" id="btn-pass">&#9197; Pass Turn</button>
+      <button class="ctrl-btn" id="btn-howto" onclick="openTutorial()">&#9432; How to Play</button>
+    </div>
+  </div>
+
+  <div class="player-panel" id="p2-panel">
+    <div class="panel-title p2-bg" id="p2-title">&#9646; Player 2 &mdash; Red<br>Connect Left &#8596; Right</div>
+    <div class="capture-score" id="p2-score">Captured: <span>0</span> cells</div>
+    <div class="pieces-grid" id="p2-pieces"></div>
+  </div>
+
+</div>
+
+<div id="instructions">
+  Blue wins: Top&updownarrow;Bottom &nbsp;&bull;&nbsp; Red wins: Left&harr;Right &nbsp;&bull;&nbsp;
+  Capture: cover both tag ends (cells beyond each tip) of an opponent group &nbsp;&bull;&nbsp;
+  R = Rotate &nbsp;&bull;&nbsp; F = Flip
+</div>
+
+
+<!-- Tutorial Modal -->
+<div id="tutorial-overlay" onclick="if(event.target===this)closeTutorial()">
+  <div id="tutorial-box">
+    <div id="tutorial-header">
+      <span>&#9432; How to Play</span>
+      <button id="tutorial-close" onclick="closeTutorial()">&#x2715;</button>
+    </div>
+    <div id="tutorial-body">
+
+      <div class="tut-section">
+        <h3>Goal</h3>
+        <p>Place pieces to build a continuous path connecting your two edges. First player to complete the connection wins.</p>
+        <div class="tut-goals">
+          <div class="tut-goal blue">&#9646; Blue<br>Connect Top &#8597; Bottom</div>
+          <div class="tut-goal red">&#9646; Red<br>Connect Left &#8596; Right</div>
+        </div>
+      </div>
+
+      <div class="tut-section">
+        <h3>Pieces</h3>
+        <p>Each player holds all 19 tetrominoes and pentominoes. Click a piece in your panel to select it, then click the board to place it. Press <strong>R</strong> to rotate and <strong>F</strong> to flip before placing. Captured pieces return to your hand, so you can place them again.</p>
+      </div>
+
+      <div class="tut-section">
+        <h3>Capture Rule</h3>
+        <p>Every connected group has <strong>tag ends</strong> &mdash; one cell beyond each degree-1 tip of the group. If you place pieces that cover <em>all</em> in-bounds tag ends of an opponent group, that entire group is captured and its pieces go into <em>your</em> hand.</p>
+        <canvas id="capture-diagram"></canvas>
+        <div class="tut-legend">
+          <div class="tut-legend-item"><div class="tut-swatch" style="background:#e74c3c"></div> Red group</div>
+          <div class="tut-legend-item"><div class="tut-swatch" style="background:#ffc800;opacity:0.85"></div> Tag ends (TE)</div>
+          <div class="tut-legend-item"><div class="tut-swatch" style="background:#3a7bd5"></div> Blue covers tag ends</div>
+          <div class="tut-legend-item"><div class="tut-swatch" style="background:#13132a;border:1px solid #333"></div> Captured (removed)</div>
+        </div>
+        <p style="margin-top:10px">A straight chain has two tag ends (one beyond each tip). An L-shape or branching group also has exactly two tag ends &mdash; one per endpoint. Groups touching a board edge may have fewer in-bounds tag ends, making them harder to capture.</p>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+const CS   = 27;
+const N    = 20;
+const SZ   = CS * N;
+const MINI = 9;
+
+const P1C  = '#3a7bd5';
+const P2C  = '#e74c3c';
+const P1CL = 'rgba(58,123,213,0.52)';
+const P2CL = 'rgba(231,76,60,0.52)';
+const CBAD = 'rgba(255,50,50,0.38)';
+const CEMPTY = '#13132a';
+const CGRID  = '#202038';
+
+// ─── Piece Definitions ────────────────────────────────────────────────────────
+const DEFS = [
+  { id:'I4',   sq:[[0,0],[0,1],[0,2],[0,3]] },
+  { id:'O4',   sq:[[0,0],[0,1],[1,0],[1,1]] },
+  { id:'T4',   sq:[[0,0],[0,1],[0,2],[1,1]] },
+  { id:'S4',   sq:[[0,1],[0,2],[1,0],[1,1]] },
+  { id:'Z4',   sq:[[0,0],[0,1],[1,1],[1,2]] },
+  { id:'L4',   sq:[[0,0],[1,0],[2,0],[2,1]] },
+  { id:'J4',   sq:[[0,1],[1,1],[2,0],[2,1]] },
+  { id:'F5',   sq:[[0,1],[0,2],[1,0],[1,1],[2,1]] },
+  { id:'I5',   sq:[[0,0],[0,1],[0,2],[0,3],[0,4]] },
+  { id:'L5',   sq:[[0,0],[1,0],[2,0],[3,0],[3,1]] },
+  { id:'N5',   sq:[[0,1],[1,0],[1,1],[2,0],[3,0]] },
+  { id:'P5',   sq:[[0,0],[0,1],[1,0],[1,1],[2,0]] },
+  { id:'T5',   sq:[[0,0],[0,1],[0,2],[1,1],[2,1]] },
+  { id:'U5',   sq:[[0,0],[0,2],[1,0],[1,1],[1,2]] },
+  { id:'V5',   sq:[[0,0],[1,0],[2,0],[2,1],[2,2]] },
+  { id:'W5',   sq:[[0,0],[1,0],[1,1],[2,1],[2,2]] },
+  { id:'X5',   sq:[[0,1],[1,0],[1,1],[1,2],[2,1]] },
+  { id:'Y5',   sq:[[0,1],[1,0],[1,1],[2,1],[3,1]] },
+  { id:'Z5',   sq:[[0,0],[0,1],[1,1],[2,1],[2,2]] },
+];
+
+// ─── Game State ───────────────────────────────────────────────────────────────
+let board, pieceBoard, placements, cur, hand, selId, rot, flp, hR, hC, gameOver, passStreak, captures;
+let winCells = null, winPlayer = 0;
+let captureAnim = null, animFrameId = null;
+const FLASH_MS = 1950, SLIDE_MS = 700;
+
+// ─── Mode / AI State ──────────────────────────────────────────────────────────
+let gameMode   = 'pvp';    // 'pvp' | 'pvc'
+let aiDiff     = 'easy';   // 'easy' | 'medium' | 'hard'
+let aiThinking = false;
+
+function resetState() {
+  board      = Array.from({length:N}, () => new Uint8Array(N));
+  pieceBoard = Array.from({length:N}, () => Array(N).fill(-1));
+  placements = [];
+  cur        = 1;
+  hand       = { 1: DEFS.map(d => d.id), 2: DEFS.map(d => d.id) };
+  selId      = null;
+  rot        = 0;
+  flp        = false;
+  hR         = -1;
+  hC         = -1;
+  gameOver   = false;
+  passStreak = 0;
+  captures   = { 1: 0, 2: 0 };
+  aiThinking = false;
+  winCells   = null;
+  winPlayer  = 0;
+  captureAnim = null;
+}
+
+// ─── Piece Transforms ─────────────────────────────────────────────────────────
+function norm(sqs) {
+  const mr = Math.min(...sqs.map(s => s[0]));
+  const mc = Math.min(...sqs.map(s => s[1]));
+  return sqs.map(([r,c]) => [r - mr, c - mc]);
+}
+function rotateCW(sqs) { return norm(sqs.map(([r,c]) => [c, -r])); }
+function flipH(sqs)     { return norm(sqs.map(([r,c]) => [r, -c])); }
+
+function transform(id, r, f) {
+  let sqs = DEFS.find(d => d.id === id).sq.map(s => [...s]);
+  if (f) sqs = flipH(sqs);
+  for (let i = 0; i < (r % 4); i++) sqs = rotateCW(sqs);
+  return norm(sqs);
+}
+
+// ─── Placement ────────────────────────────────────────────────────────────────
+function getAnchor(id, r, f, mR, mC) {
+  const sqs  = transform(id, r, f);
+  const maxR = Math.max(...sqs.map(s => s[0]));
+  const maxC = Math.max(...sqs.map(s => s[1]));
+  return [mR - Math.round(maxR / 2), mC - Math.round(maxC / 2)];
+}
+
+function getSquares(id, r, f, aR, aC) {
+  return transform(id, r, f).map(([dr, dc]) => [aR + dr, aC + dc]);
+}
+
+function canPlace(sqs) {
+  for (const [r,c] of sqs)
+    if (r < 0 || r >= N || c < 0 || c >= N || board[r][c] !== 0) return false;
+  return true;
+}
+
+function doPlace(sqs, player, pidx) {
+  for (const [r,c] of sqs) { board[r][c] = player; pieceBoard[r][c] = pidx; }
+}
+
+// ─── Capture (tag-end rule) ───────────────────────────────────────────────────
+function getTagEnds(group) {
+  const cellSet = new Set(group.map(([r,c]) => r * N + c));
+  const D = [[1,0],[-1,0],[0,1],[0,-1]];
+  const tagEnds = [];
+  for (const [r, c] of group) {
+    const pieceNbrs = D.map(([dr,dc]) => [r+dr, c+dc])
+                       .filter(([nr,nc]) => cellSet.has(nr * N + nc));
+    if (pieceNbrs.length === 1) {
+      const [nr, nc] = pieceNbrs[0];
+      const tr = r + (r - nr);
+      const tc = c + (c - nc);
+      if (tr >= 0 && tr < N && tc >= 0 && tc < N)
+        tagEnds.push([tr, tc]);
+    }
+  }
+  return tagEnds;
+}
+
+function checkCaptures(attacker, opponent) {
+  const vis = Array.from({length:N}, () => new Uint8Array(N));
+  let total = 0;
+  const events = [];
+  const D = [[1,0],[-1,0],[0,1],[0,-1]];
+  for (let r = 0; r < N; r++) {
+    for (let c = 0; c < N; c++) {
+      if (board[r][c] !== opponent || vis[r][c]) continue;
+      const group = [], q = [[r, c]];
+      vis[r][c] = 1;
+      for (let i = 0; i < q.length; i++) {
+        const [gr, gc] = q[i];
+        group.push([gr, gc]);
+        for (const [dr, dc] of D) {
+          const nr = gr+dr, nc = gc+dc;
+          if (nr >= 0 && nr < N && nc >= 0 && nc < N &&
+              board[nr][nc] === opponent && !vis[nr][nc]) {
+            vis[nr][nc] = 1; q.push([nr, nc]);
+          }
+        }
+      }
+      const tagEnds = getTagEnds(group);
+      if (tagEnds.length > 0 &&
+          tagEnds.every(([tr, tc]) => board[tr][tc] === attacker)) {
+        events.push({ group: [...group], tagEnds: [...tagEnds] });
+        const capturedPidxs = new Set(group.map(([gr,gc]) => pieceBoard[gr][gc]));
+        for (const [gr, gc] of group) { board[gr][gc] = 0; pieceBoard[gr][gc] = -1; total++; }
+        for (const pidx of capturedPidxs)
+          if (pidx >= 0) hand[attacker].push(placements[pidx].pieceId);
+      }
+    }
+  }
+  return { total, events };
+}
+
+// ─── Win Detection (BFS) ──────────────────────────────────────────────────────
+function bfsEdge(p, topBottom) {
+  const vis = Array.from({length:N}, () => new Uint8Array(N));
+  const q   = [];
+  if (topBottom) {
+    for (let c = 0; c < N; c++)
+      if (board[0][c] === p) { vis[0][c] = 1; q.push([0, c]); }
+  } else {
+    for (let r = 0; r < N; r++)
+      if (board[r][0] === p) { vis[r][0] = 1; q.push([r, 0]); }
+  }
+  const D = [[1,0],[-1,0],[0,1],[0,-1]];
+  for (let i = 0; i < q.length; i++) {
+    const [r, c] = q[i];
+    if (topBottom  && r === N - 1) return true;
+    if (!topBottom && c === N - 1) return true;
+    for (const [dr, dc] of D) {
+      const nr = r + dr, nc = c + dc;
+      if (nr >= 0 && nr < N && nc >= 0 && nc < N && !vis[nr][nc] && board[nr][nc] === p) {
+        vis[nr][nc] = 1;
+        q.push([nr, nc]);
+      }
+    }
+  }
+  return false;
+}
+
+function getWin(p) {
+  if (p === 1 && bfsEdge(1, true))  return 'tb';
+  if (p === 2 && bfsEdge(2, false)) return 'lr';
+  return null;
+}
+
+function getWinCells(p, dir) {
+  const topBottom = dir === 'tb';
+  const D = [[1,0],[-1,0],[0,1],[0,-1]];
+  const seen = new Uint8Array(N * N);
+  const key  = (r, c) => r * N + c;
+  for (let r = 0; r < N; r++) {
+    for (let c = 0; c < N; c++) {
+      if (board[r][c] !== p || seen[key(r, c)]) continue;
+      const comp = [], q = [[r, c]];
+      seen[key(r, c)] = 1;
+      let touchA = false, touchB = false;
+      for (let i = 0; i < q.length; i++) {
+        const [cr, cc] = q[i];
+        comp.push([cr, cc]);
+        if (topBottom  && cr === 0)     touchA = true;
+        if (topBottom  && cr === N - 1) touchB = true;
+        if (!topBottom && cc === 0)     touchA = true;
+        if (!topBottom && cc === N - 1) touchB = true;
+        for (const [dr, dc] of D) {
+          const nr = cr + dr, nc = cc + dc;
+          if (nr >= 0 && nr < N && nc >= 0 && nc < N && !seen[key(nr, nc)] && board[nr][nc] === p) {
+            seen[key(nr, nc)] = 1;
+            q.push([nr, nc]);
+          }
+        }
+      }
+      if (touchA && touchB) return comp;
+    }
+  }
+  return [];
+}
+
+// ─── Canvas ───────────────────────────────────────────────────────────────────
+const canvas = document.getElementById('board-canvas');
+canvas.width = canvas.height = SZ;
+const ctx = canvas.getContext('2d');
+
+function drawBoard() {
+  ctx.fillStyle = '#0d0d1e';
+  ctx.fillRect(0, 0, SZ, SZ);
+
+  ctx.fillStyle = 'rgba(58,123,213,0.13)';
+  ctx.fillRect(0, 0, SZ, CS);
+  ctx.fillRect(0, SZ - CS, SZ, CS);
+  ctx.fillStyle = 'rgba(231,76,60,0.13)';
+  ctx.fillRect(0, CS, CS, SZ - CS * 2);
+  ctx.fillRect(SZ - CS, CS, CS, SZ - CS * 2);
+
+  for (let r = 0; r < N; r++) {
+    for (let c = 0; c < N; c++) {
+      const v = board[r][c];
+      ctx.fillStyle = v === 1 ? P1C : v === 2 ? P2C : CEMPTY;
+      ctx.fillRect(c * CS + 1, r * CS + 1, CS - 2, CS - 2);
+    }
+  }
+
+  ctx.strokeStyle = 'rgba(255,255,255,0.80)';
+  ctx.lineWidth = 0.8;
+  for (let i = 0; i <= N; i++) {
+    ctx.beginPath(); ctx.moveTo(i * CS, 0);  ctx.lineTo(i * CS, SZ); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, i * CS);  ctx.lineTo(SZ, i * CS); ctx.stroke();
+  }
+
+  if (winCells && winCells.length) {
+    const bright = winPlayer === 1 ? 'rgba(160,210,255,0.55)' : 'rgba(255,160,160,0.55)';
+    ctx.fillStyle = bright;
+    for (const [wr, wc] of winCells)
+      ctx.fillRect(wc * CS + 1, wr * CS + 1, CS - 2, CS - 2);
+    ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+    ctx.lineWidth = 1.5;
+    for (const [wr, wc] of winCells)
+      ctx.strokeRect(wc * CS + 2.5, wr * CS + 2.5, CS - 5, CS - 5);
+  }
+
+  if (selId && hR >= 0 && !gameOver && !aiThinking) {
+    const [aR, aC] = getAnchor(selId, rot, flp, hR, hC);
+    const sqs = getSquares(selId, rot, flp, aR, aC);
+    const ok  = canPlace(sqs);
+    ctx.fillStyle = ok ? (cur === 1 ? P1CL : P2CL) : CBAD;
+    for (const [r, c] of sqs) {
+      if (r >= 0 && r < N && c >= 0 && c < N)
+        ctx.fillRect(c * CS + 1, r * CS + 1, CS - 2, CS - 2);
+    }
+  }
+
+  ctx.font = 'bold 10px Segoe UI';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = 'rgba(58,123,213,0.75)';
+  ctx.fillText('▲ BLUE ▲', SZ / 2, CS / 2);
+  ctx.fillText('▼ BLUE ▼', SZ / 2, SZ - CS / 2);
+  ctx.fillStyle = 'rgba(231,76,60,0.75)';
+  ctx.save(); ctx.translate(CS / 2, SZ / 2); ctx.rotate(-Math.PI / 2);
+  ctx.fillText('◄ RED ◄', 0, 0);
+  ctx.restore();
+  ctx.save(); ctx.translate(SZ - CS / 2, SZ / 2); ctx.rotate(Math.PI / 2);
+  ctx.fillText('► RED ►', 0, 0);
+  ctx.restore();
+
+  drawCaptureAnim();
+
+  ctx.strokeStyle = '#3a3a6a';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(0, 0, SZ, SZ);
+}
+
+// ─── Capture Animation ────────────────────────────────────────────────────────
+function startCaptureAnim(events, attacker, onComplete) {
+  captureAnim = { events, attacker, onComplete, startTime: performance.now() };
+  if (!animFrameId) {
+    function loop() {
+      drawBoard();
+      animFrameId = captureAnim ? requestAnimationFrame(loop) : null;
+    }
+    animFrameId = requestAnimationFrame(loop);
+  }
+}
+
+function drawCaptureAnim() {
+  if (!captureAnim) return;
+  const elapsed = performance.now() - captureAnim.startTime;
+  const { events, attacker, onComplete } = captureAnim;
+
+  if (elapsed >= FLASH_MS + SLIDE_MS) {
+    captureAnim = null;
+    onComplete();
+    return;
+  }
+
+  const capColor  = attacker === 1 ? P2C : P1C;   // captured = opponent's colour
+  const slideDir  = attacker === 1 ? -1 : 1;       // left → P1 panel, right → P2 panel
+
+  if (elapsed < FLASH_MS) {
+    // ── Flash phase: tag ends glow gold, captured cells flash white ──────────
+    const pulse = 0.5 + 0.5 * Math.sin((elapsed / FLASH_MS) * Math.PI * 5);
+
+    for (const ev of events) {
+      // Redraw captured cells (already removed from board)
+      ctx.fillStyle = capColor;
+      for (const [r, c] of ev.group)
+        ctx.fillRect(c * CS + 1, r * CS + 1, CS - 2, CS - 2);
+
+      // White pulse overlay
+      ctx.fillStyle = `rgba(255,255,255,${(pulse * 0.70).toFixed(2)})`;
+      for (const [r, c] of ev.group)
+        ctx.fillRect(c * CS + 1, r * CS + 1, CS - 2, CS - 2);
+
+      // Tag ends: gold fill + bright ring
+      for (const [tr, tc] of ev.tagEnds) {
+        ctx.fillStyle = `rgba(255,210,0,${(pulse * 0.40).toFixed(2)})`;
+        ctx.fillRect(tc * CS + 1, tr * CS + 1, CS - 2, CS - 2);
+        ctx.strokeStyle = `rgba(255,200,0,${(0.55 + pulse * 0.45).toFixed(2)})`;
+        ctx.lineWidth = 2.5;
+        ctx.strokeRect(tc * CS + 2.5, tr * CS + 2.5, CS - 5, CS - 5);
+      }
+    }
+  } else {
+    // ── Slide phase: captured cells fly off toward capturing player's panel ──
+    const t      = (elapsed - FLASH_MS) / SLIDE_MS;
+    const eased  = t * t;                    // ease-in (accelerates off screen)
+    const offsetX = slideDir * SZ * eased;
+    const alpha  = 1 - eased;
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(offsetX, 0);
+    ctx.fillStyle = capColor;
+    for (const ev of events)
+      for (const [r, c] of ev.group)
+        ctx.fillRect(c * CS + 1, r * CS + 1, CS - 2, CS - 2);
+    ctx.restore();
+  }
+}
+
+// ─── Mini Piece Renderer ──────────────────────────────────────────────────────
+function renderMini(cnv, sqs, color, dimmed) {
+  const maxR = sqs.length ? Math.max(...sqs.map(s => s[0])) : 0;
+  const maxC = sqs.length ? Math.max(...sqs.map(s => s[1])) : 0;
+  const pad  = 2;
+  cnv.width  = (maxC + 1) * MINI + pad * 2;
+  cnv.height = (maxR + 1) * MINI + pad * 2;
+  const c = cnv.getContext('2d');
+  c.clearRect(0, 0, cnv.width, cnv.height);
+  c.fillStyle = dimmed ? '#2a2a40' : color;
+  for (const [r, col] of sqs)
+    c.fillRect(pad + col * MINI, pad + r * MINI, MINI - 1, MINI - 1);
+}
+
+// ─── Piece Panels ─────────────────────────────────────────────────────────────
+function buildPanels() {
+  for (const p of [1, 2]) {
+    const cont = document.getElementById(`p${p}-pieces`);
+    cont.innerHTML = '';
+    for (const def of DEFS) {
+      const btn = document.createElement('div');
+      btn.className      = 'piece-btn';
+      btn.dataset.pid    = def.id;
+      btn.dataset.player = p;
+      const cnv = document.createElement('canvas');
+      renderMini(cnv, transform(def.id, 0, false), p === 1 ? P1C : P2C, false);
+      btn.appendChild(cnv);
+      const badge = document.createElement('span');
+      badge.className = 'piece-count';
+      btn.appendChild(badge);
+      btn.addEventListener('click', () => onPieceClick(p, def.id));
+      cont.appendChild(btn);
+    }
+  }
+}
+
+function refreshPanels() {
+  for (const p of [1, 2]) {
+    const isAiPanel = gameMode === 'pvc' && p === 2;
+    const activePlayer = p === cur && !gameOver && !aiThinking;
+    document.getElementById(`p${p}-panel`).style.opacity =
+      (p === cur && !aiThinking) ? '1' : '0.42';
+    document.getElementById(`p${p}-pieces`).querySelectorAll('.piece-btn').forEach(btn => {
+      const id    = btn.dataset.pid;
+      const isP   = parseInt(btn.dataset.player);
+      const count = hand[isP].filter(x => x === id).length;
+      const isSel = id === selId && isP === cur;
+      const sqs   = transform(id, isSel ? rot : 0, isSel ? flp : false);
+      btn.classList.toggle('used',     count === 0);
+      btn.classList.toggle('selected', isSel);
+      btn.classList.toggle('inactive', isP !== cur || isAiPanel || aiThinking);
+      renderMini(btn.querySelector('canvas'), sqs, isP === 1 ? P1C : P2C, count === 0);
+      const badge = btn.querySelector('.piece-count');
+      badge.textContent = count > 1 ? `×${count}` : '';
+    });
+  }
+}
+
+function refreshScores() {
+  for (const p of [1, 2]) {
+    const span = document.querySelector(`#p${p}-score span`);
+    if (span) span.textContent = captures[p];
+  }
+}
+
+function onPieceClick(p, id) {
+  if (gameOver || aiThinking || p !== cur || hand[p].filter(x => x === id).length === 0) return;
+  if (gameMode === 'pvc' && p === 2) return;
+  selId = selId === id ? null : id;
+  if (selId) { rot = 0; flp = false; }
+  refreshPanels();
+  drawBoard();
+}
+
+// ─── Board Events ─────────────────────────────────────────────────────────────
+canvas.addEventListener('mousemove', e => {
+  const r = canvas.getBoundingClientRect();
+  hR = Math.floor((e.clientY - r.top)  / CS);
+  hC = Math.floor((e.clientX - r.left) / CS);
+  drawBoard();
+});
+
+canvas.addEventListener('mouseleave', () => { hR = hC = -1; drawBoard(); });
+
+canvas.addEventListener('click', e => {
+  if (gameOver || !selId || aiThinking) return;
+  if (gameMode === 'pvc' && cur === 2) return;
+  const r   = canvas.getBoundingClientRect();
+  const mR  = Math.floor((e.clientY - r.top)  / CS);
+  const mC  = Math.floor((e.clientX - r.left) / CS);
+  const [aR, aC] = getAnchor(selId, rot, flp, mR, mC);
+  const sqs = getSquares(selId, rot, flp, aR, aC);
+  if (!canPlace(sqs)) return;
+
+  const pidx = placements.length;
+  placements.push({ player: cur, pieceId: selId });
+  doPlace(sqs, cur, pidx);
+  const hi = hand[cur].indexOf(selId);
+  if (hi !== -1) hand[cur].splice(hi, 1);
+  selId = null; rot = 0; flp = false;
+  passStreak = 0;
+
+  const capResult = checkCaptures(cur, cur === 1 ? 2 : 1);
+
+  const afterCaptures = () => {
+    if (capResult.total > 0) { captures[cur] += capResult.total; refreshScores(); }
+    const winDir = getWin(cur);
+    if (winDir) { aiThinking = false; showWin(cur, winDir); return; }
+    cur = cur === 1 ? 2 : 1;
+    aiThinking = false;
+    setStatus(); refreshPanels(); drawBoard();
+    triggerAi();
+  };
+
+  if (capResult.events.length > 0) {
+    aiThinking = true;
+    setStatus(); refreshPanels(); drawBoard();
+    startCaptureAnim(capResult.events, cur, afterCaptures);
+  } else {
+    afterCaptures();
+  }
+});
+
+// ─── Controls ─────────────────────────────────────────────────────────────────
+document.getElementById('btn-rotate').onclick = () => {
+  if (!selId || gameOver || aiThinking) return;
+  rot = (rot + 1) % 4;
+  refreshPanels(); drawBoard();
+};
+
+document.getElementById('btn-flip').onclick = () => {
+  if (!selId || gameOver || aiThinking) return;
+  flp = !flp;
+  refreshPanels(); drawBoard();
+};
+
+document.getElementById('btn-pass').onclick = () => {
+  if (gameOver || aiThinking) return;
+  if (gameMode === 'pvc' && cur === 2) return;
+  selId = null; rot = 0; flp = false;
+  passStreak++;
+  if (passStreak >= 2) { showDraw(); return; }
+  cur = cur === 1 ? 2 : 1;
+  setStatus(); refreshPanels(); drawBoard();
+  triggerAi();
+};
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'r' || e.key === 'R') document.getElementById('btn-rotate').click();
+  if (e.key === 'f' || e.key === 'F') document.getElementById('btn-flip').click();
+});
+
+// ─── Status Bar ───────────────────────────────────────────────────────────────
+function setStatus() {
+  const el = document.getElementById('status');
+  if (aiThinking) {
+    el.innerHTML = '&#129302; Computer is thinking&hellip;';
+    el.className = 'think-bg';
+    return;
+  }
+  if (gameMode === 'pvc') {
+    el.innerHTML = cur === 1
+      ? "Your Turn &mdash; Blue"
+      : "&#129302; Computer&rsquo;s Turn &mdash; Red";
+  } else {
+    el.innerHTML = cur === 1
+      ? "Player 1&rsquo;s Turn &mdash; Blue"
+      : "Player 2&rsquo;s Turn &mdash; Red";
+  }
+  el.className = cur === 1 ? 'p1-bg' : 'p2-bg';
+}
+
+// ─── Mode / Difficulty Controls ───────────────────────────────────────────────
+function setMode(m) {
+  gameMode = m;
+  document.getElementById('btn-pvp').classList.toggle('active', m === 'pvp');
+  document.getElementById('btn-pvc').classList.toggle('active', m === 'pvc');
+  document.getElementById('diff-group').style.display = m === 'pvc' ? 'flex' : 'none';
+  refreshModeUI();
+  restart();
+}
+
+function setDiff(d) {
+  aiDiff = d;
+  ['easy','medium','hard'].forEach(x =>
+    document.getElementById('btn-' + x).classList.toggle('active', x === d));
+}
+
+function refreshModeUI() {
+  const p2title = document.getElementById('p2-title');
+  if (gameMode === 'pvc') {
+    p2title.innerHTML = '&#129302; Computer &mdash; Red<br>Connect Left &#8596; Right';
+  } else {
+    p2title.innerHTML = '&#9646; Player 2 &mdash; Red<br>Connect Left &#8596; Right';
+  }
+}
+
+// ─── Win / Draw ───────────────────────────────────────────────────────────────
+function showWin(p, dir) {
+  gameOver   = true;
+  winPlayer  = p;
+  winCells   = getWinCells(p, dir);
+  const dirLabel  = dir === 'tb' ? 'Top→Bottom' : 'Left→Right';
+  const winnerStr = gameMode === 'pvc'
+    ? (p === 1 ? 'You Win!' : 'Computer Wins!')
+    : `Player ${p} Wins!`;
+  const color = p === 1 ? '#7ab4ff' : '#ff8080';
+  const msg = document.getElementById('win-banner-msg');
+  msg.style.color   = color;
+  msg.textContent   = `${winnerStr}  ${p === 1 ? 'Blue' : 'Red'} connected ${dirLabel}`;
+  document.getElementById('win-banner').classList.add('show');
+  const el = document.getElementById('status');
+  el.textContent = winnerStr;
+  el.className   = 'win-bg';
+  drawBoard();
+}
+
+function showDraw() {
+  gameOver = true;
+  const msg = document.getElementById('win-banner-msg');
+  msg.style.color = '#dddd80';
+  msg.textContent = 'Draw — both players passed.';
+  document.getElementById('win-banner').classList.add('show');
+  const el = document.getElementById('status');
+  el.textContent = 'Draw!';
+  el.className   = 'win-bg';
+}
+
+// ─── Restart ──────────────────────────────────────────────────────────────────
+function restart() {
+  document.getElementById('win-banner').classList.remove('show');
+  resetState();
+  refreshModeUI();
+  setStatus();
+  buildPanels();
+  refreshPanels();
+  refreshScores();
+  drawBoard();
+}
+
+// ─── AI — Move Enumeration ────────────────────────────────────────────────────
+function getAllMoves(player) {
+  const moves = [];
+  const available = [...new Set(hand[player])];
+  for (const id of available) {
+    const seenKeys = new Set();
+    for (let r = 0; r < 4; r++) {
+      for (const f of [false, true]) {
+        const sqs = transform(id, r, f);
+        const key = sqs.map(([sr,sc]) => `${sr},${sc}`).join('|');
+        if (seenKeys.has(key)) continue;
+        seenKeys.add(key);
+        const maxR = Math.max(...sqs.map(s => s[0]));
+        const maxC = Math.max(...sqs.map(s => s[1]));
+        for (let aR = 0; aR + maxR < N; aR++) {
+          for (let aC = 0; aC + maxC < N; aC++) {
+            const placed = sqs.map(([dr,dc]) => [aR+dr, aC+dc]);
+            if (canPlace(placed)) {
+              moves.push({ pieceId: id, rot: r, flp: f, aR, aC, sqs: placed });
+            }
+          }
+        }
+      }
+    }
+  }
+  return moves;
+}
+
+// ─── AI — Path Distance (Dijkstra, 0/1 edge costs) ───────────────────────────
+// pathDistFull returns the complete distance matrix.
+// pathDist returns just the minimum (win-edge distance).
+// Own cells cost 0, empty cells cost 1, opponent cells are blocked.
+function pathDistFull(player) {
+  const opp = player === 1 ? 2 : 1;
+  const INF = 9999;
+  const dist = Array.from({length:N}, () => new Array(N).fill(INF));
+  const vis  = Array.from({length:N}, () => new Uint8Array(N));
+  const D    = [[1,0],[-1,0],[0,1],[0,-1]];
+
+  if (player === 1) {
+    for (let c = 0; c < N; c++) if (board[0][c] !== opp)
+      dist[0][c] = board[0][c] === player ? 0 : 1;
+  } else {
+    for (let r = 0; r < N; r++) if (board[r][0] !== opp)
+      dist[r][0] = board[r][0] === player ? 0 : 1;
+  }
+
+  for (;;) {
+    let bestD = INF, br = -1, bc = -1;
+    for (let r = 0; r < N; r++) for (let c = 0; c < N; c++)
+      if (!vis[r][c] && dist[r][c] < bestD) { bestD = dist[r][c]; br = r; bc = c; }
+    if (br < 0) break;
+    vis[br][bc] = 1;
+    for (const [dr,dc] of D) {
+      const nr = br+dr, nc = bc+dc;
+      if (nr<0||nr>=N||nc<0||nc>=N||vis[nr][nc]||board[nr][nc]===opp) continue;
+      const nd = bestD + (board[nr][nc] === player ? 0 : 1);
+      if (nd < dist[nr][nc]) dist[nr][nc] = nd;
+    }
+  }
+  return dist;
+}
+
+function pathDist(player) {
+  const dist = pathDistFull(player);
+  let best = 9999;
+  if (player === 1) for (let c = 0; c < N; c++) best = Math.min(best, dist[N-1][c]);
+  else              for (let r = 0; r < N; r++) best = Math.min(best, dist[r][N-1]);
+  return best;
+}
+
+// pathDistFullFromEnd — same as pathDistFull but starting from the FAR edge.
+// Blue: from bottom row. Red: from right column.
+function pathDistFullFromEnd(player) {
+  const opp = player === 1 ? 2 : 1;
+  const INF = 9999;
+  const dist = Array.from({length:N}, () => new Array(N).fill(INF));
+  const vis  = Array.from({length:N}, () => new Uint8Array(N));
+  const D    = [[1,0],[-1,0],[0,1],[0,-1]];
+  if (player === 1) {
+    for (let c = 0; c < N; c++) if (board[N-1][c] !== opp)
+      dist[N-1][c] = board[N-1][c] === player ? 0 : 1;
+  } else {
+    for (let r = 0; r < N; r++) if (board[r][N-1] !== opp)
+      dist[r][N-1] = board[r][N-1] === player ? 0 : 1;
+  }
+  for (;;) {
+    let bestD = INF, br = -1, bc = -1;
+    for (let r = 0; r < N; r++) for (let c = 0; c < N; c++)
+      if (!vis[r][c] && dist[r][c] < bestD) { bestD = dist[r][c]; br = r; bc = c; }
+    if (br < 0) break;
+    vis[br][bc] = 1;
+    for (const [dr,dc] of D) {
+      const nr = br+dr, nc = bc+dc;
+      if (nr<0||nr>=N||nc<0||nc>=N||vis[nr][nc]||board[nr][nc]===opp) continue;
+      const nd = bestD + (board[nr][nc] === player ? 0 : 1);
+      if (nd < dist[nr][nc]) dist[nr][nc] = nd;
+    }
+  }
+  return dist;
+}
+
+// ─── AI — Priority Pre-filter ─────────────────────────────────────────────────
+// Rank moves by critical-path value: a cell scores high only when it is
+// reachable from BOTH edges (near AND far), which means it lies on or near
+// the actual winning path through the board.  Using only the near-edge
+// distance caused edge cells to always rank first (the original bug).
+//
+// Formula per cell: v = max(0, N - d_near) * max(0, N - d_far) / N
+// This is zero at either edge and peaks at the board's midpoint.
+function topMovesByPriority(moves, count) {
+  const d1s = pathDistFull(1);         // Blue from top
+  const d2s = pathDistFull(2);         // Red  from left
+  const d1e = pathDistFullFromEnd(1);  // Blue from bottom
+  const d2e = pathDistFullFromEnd(2);  // Red  from right
+  const scored = moves.map(m => {
+    let s = 0;
+    for (const [r,c] of m.sqs) {
+      // Red's critical-path value (advance Red Left→Right)
+      const v2 = Math.max(0, N - (d2s[r][c] >= 9999 ? N : d2s[r][c]))
+               * Math.max(0, N - (d2e[r][c] >= 9999 ? N : d2e[r][c])) / N;
+      // Blue's critical-path value (block Blue Top→Bottom)
+      const v1 = Math.max(0, N - (d1s[r][c] >= 9999 ? N : d1s[r][c]))
+               * Math.max(0, N - (d1e[r][c] >= 9999 ? N : d1e[r][c])) / N;
+      s += v2 + v1;
+    }
+    return { m, s };
+  });
+  scored.sort((a,b) => b.s - a.s);
+  return scored.slice(0, count).map(x => x.m);
+}
+
+// ─── AI — Capture-threat moves ────────────────────────────────────────────────
+// Returns moves that cover at least one empty tag-end of an opponent group.
+// These capture-setup moves may be missed by the path-distance pre-filter alone.
+function getCaptureThreatMoves(moves, opponent, maxCount) {
+  const tagEndCells = new Set();
+  const vis = Array.from({length:N}, () => new Uint8Array(N));
+  const D = [[1,0],[-1,0],[0,1],[0,-1]];
+  for (let r = 0; r < N; r++) {
+    for (let c = 0; c < N; c++) {
+      if (board[r][c] !== opponent || vis[r][c]) continue;
+      const group = [], q = [[r, c]];
+      vis[r][c] = 1;
+      for (let i = 0; i < q.length; i++) {
+        const [gr, gc] = q[i];
+        group.push([gr, gc]);
+        for (const [dr, dc] of D) {
+          const nr = gr+dr, nc = gc+dc;
+          if (nr>=0&&nr<N&&nc>=0&&nc<N&&board[nr][nc]===opponent&&!vis[nr][nc]) {
+            vis[nr][nc] = 1; q.push([nr, nc]);
+          }
+        }
+      }
+      for (const [tr, tc] of getTagEnds(group))
+        if (board[tr][tc] === 0) tagEndCells.add(tr * N + tc);
+    }
+  }
+  if (!tagEndCells.size) return [];
+  const scored = [];
+  for (const m of moves) {
+    const hits = m.sqs.filter(([r,c]) => tagEndCells.has(r * N + c)).length;
+    if (hits > 0) scored.push({ m, hits });
+  }
+  scored.sort((a,b) => b.hits - a.hits);
+  return scored.slice(0, maxCount).map(x => x.m);
+}
+
+// ─── AI — Tag-end threat scoring ──────────────────────────────────────────────
+// After a placement, score how many opponent tag ends the attacker now partially
+// covers (partial coverage = capture setup; higher group size = more valuable).
+function tagEndThreatScore(attacker, opponent) {
+  let score = 0;
+  const vis = Array.from({length:N}, () => new Uint8Array(N));
+  const D = [[1,0],[-1,0],[0,1],[0,-1]];
+  for (let r = 0; r < N; r++) {
+    for (let c = 0; c < N; c++) {
+      if (board[r][c] !== opponent || vis[r][c]) continue;
+      const group = [], q = [[r, c]];
+      vis[r][c] = 1;
+      for (let i = 0; i < q.length; i++) {
+        const [gr, gc] = q[i];
+        group.push([gr, gc]);
+        for (const [dr, dc] of D) {
+          const nr = gr+dr, nc = gc+dc;
+          if (nr>=0&&nr<N&&nc>=0&&nc<N&&board[nr][nc]===opponent&&!vis[nr][nc]) {
+            vis[nr][nc] = 1; q.push([nr, nc]);
+          }
+        }
+      }
+      const tagEnds = getTagEnds(group);
+      if (!tagEnds.length) continue;
+      const covered = tagEnds.filter(([tr,tc]) => board[tr][tc] === attacker).length;
+      if (covered > 0 && covered < tagEnds.length)
+        score += covered * Math.ceil(group.length / 2);
+    }
+  }
+  return score;
+}
+
+// ─── AI — Defensive Tag-end Coverage ─────────────────────────────────────────
+// Finds moves that cover the EMPTY tag ends of the AI player's own groups
+// where the opponent already controls at least one tag end (i.e. the group is
+// in danger of being captured next turn).  These defensive moves may be ranked
+// poorly by the path-distance pre-filter alone.
+function getDefensiveTagEndMoves(moves, player, maxCount) {
+  const opp = player === 1 ? 2 : 1;
+  const urgentCells = new Set();
+  const vis = Array.from({length:N}, () => new Uint8Array(N));
+  const D = [[1,0],[-1,0],[0,1],[0,-1]];
+  for (let r = 0; r < N; r++) {
+    for (let c = 0; c < N; c++) {
+      if (board[r][c] !== player || vis[r][c]) continue;
+      const group = [], q = [[r, c]];
+      vis[r][c] = 1;
+      for (let i = 0; i < q.length; i++) {
+        const [gr, gc] = q[i];
+        group.push([gr, gc]);
+        for (const [dr, dc] of D) {
+          const nr = gr+dr, nc = gc+dc;
+          if (nr>=0&&nr<N&&nc>=0&&nc<N&&board[nr][nc]===player&&!vis[nr][nc]) {
+            vis[nr][nc] = 1; q.push([nr, nc]);
+          }
+        }
+      }
+      const tagEnds = getTagEnds(group);
+      if (!tagEnds.length) continue;
+      const oppCovered = tagEnds.filter(([tr,tc]) => board[tr][tc] === opp).length;
+      if (oppCovered > 0) {
+        for (const [tr,tc] of tagEnds)
+          if (board[tr][tc] === 0) urgentCells.add(tr * N + tc);
+      }
+    }
+  }
+  if (!urgentCells.size) return [];
+  const scored = [];
+  for (const m of moves) {
+    const hits = m.sqs.filter(([r,c]) => urgentCells.has(r * N + c)).length;
+    if (hits > 0) scored.push({ m, hits });
+  }
+  scored.sort((a,b) => b.hits - a.hits);
+  return scored.slice(0, maxCount).map(x => x.m);
+}
+
+// ─── AI — Execute a Move ──────────────────────────────────────────────────────
+function applyAiMove(move) {
+  const pidx = placements.length;
+  placements.push({ player: 2, pieceId: move.pieceId });
+  doPlace(move.sqs, 2, pidx);
+  const hi = hand[2].indexOf(move.pieceId);
+  if (hi !== -1) hand[2].splice(hi, 1);
+  passStreak = 0;
+
+  const capResult = checkCaptures(2, 1);
+
+  const afterCaptures = () => {
+    if (capResult.total > 0) { captures[2] += capResult.total; refreshScores(); }
+    const winDir = getWin(2);
+    if (winDir) { showWin(2, winDir); return; }
+    cur = 1;
+    aiThinking = false;
+    setStatus(); refreshPanels(); drawBoard();
+  };
+
+  if (capResult.events.length > 0) {
+    drawBoard();
+    startCaptureAnim(capResult.events, 2, afterCaptures);
+  } else {
+    afterCaptures();
+    aiThinking = false;
+  }
+}
+
+function doAiMove() {
+  if (gameOver || cur !== 2) return;
+
+  const moves = getAllMoves(2);
+  if (moves.length === 0) {
+    passStreak++;
+    if (passStreak >= 2) { showDraw(); return; }
+    cur = 1;
+    aiThinking = false;
+    setStatus(); refreshPanels(); drawBoard();
+    return;
+  }
+
+  let chosen;
+
+  // ── Shared save/restore helpers ───────────────────────────────────────────────
+  function saveState() {
+    return {
+      board:      board.map(row => new Uint8Array(row)),
+      pieceBoard: pieceBoard.map(row => [...row]),
+      placements: [...placements],
+      h1:         [...hand[1]],
+      h2:         [...hand[2]],
+      captures:   { ...captures },
+    };
+  }
+  function restoreState(s) {
+    board = s.board; pieceBoard = s.pieceBoard; placements = s.placements;
+    hand[1] = s.h1; hand[2] = s.h2; captures = s.captures;
+  }
+
+  // Simulate a move for player 2, return cap count and whether it wins.
+  // Caller must restore state afterwards.
+  function simAiMove(m) {
+    const pidx = placements.length;
+    placements.push({ player: 2, pieceId: m.pieceId });
+    doPlace(m.sqs, 2, pidx);
+    const hi = hand[2].indexOf(m.pieceId);
+    if (hi !== -1) hand[2].splice(hi, 1);
+    return checkCaptures(2, 1).total;
+  }
+
+  // ── Easy ─────────────────────────────────────────────────────────────────────
+  // Plays in the right strategic area but picks randomly enough to be beatable.
+  // Still checks for immediate wins and captures so it isn't obviously foolish.
+  if (aiDiff === 'easy') {
+    const topCands = topMovesByPriority(moves, Math.min(60, moves.length));
+
+    // Check for immediate wins first
+    for (const m of topCands) {
+      const s = saveState(); simAiMove(m);
+      const wins = getWin(2) !== null;
+      restoreState(s);
+      if (wins) { chosen = m; break; }
+    }
+
+    // Then check for immediate captures
+    if (!chosen) {
+      let bestCap = 0;
+      for (const m of topCands) {
+        const s = saveState(); const cap = simAiMove(m); restoreState(s);
+        if (cap > bestCap) { bestCap = cap; chosen = m; }
+      }
+    }
+
+    // Otherwise random pick from the top half of priority-scored moves
+    if (!chosen) {
+      const pool = topMovesByPriority(moves, Math.min(Math.ceil(moves.length * 0.5), 80));
+      const cutoff = Math.max(1, Math.ceil(pool.length * 0.5));
+      chosen = pool[Math.floor(Math.random() * cutoff)];
+    }
+
+  // ── Medium ───────────────────────────────────────────────────────────────────
+  // Full simulation: captures + win detection + path-distance scoring.
+  // Candidate pool now includes capture-threat and defensive moves so the AI
+  // never completely ignores capture opportunities or its own vulnerable groups.
+  // A vulnerability penalty discourages moves that expose Red's own groups.
+  } else if (aiDiff === 'medium') {
+    const pathCands    = topMovesByPriority(moves, Math.min(80, moves.length));
+    const captureCands = getCaptureThreatMoves(moves, 1, 20);
+    const defenseCands = getDefensiveTagEndMoves(moves, 2, 15);
+    const candSet = new Set(pathCands);
+    for (const m of captureCands) candSet.add(m);
+    for (const m of defenseCands) candSet.add(m);
+    const candidates = [...candSet];
+
+    const p1B = pathDist(1);
+    const p2B = pathDist(2);
+    const blockW = p1B <= 4 ? 5 : p1B <= 8 ? 4 : 3;
+    const advW   = p2B <= 4 ? 5 : p2B <= 8 ? 3 : 2;
+
+    let best = -Infinity;
+    for (const m of candidates) {
+      const s = saveState();
+      const cap = simAiMove(m);
+
+      // Take an immediate win without hesitation
+      if (getWin(2)) {
+        restoreState(s); chosen = m; best = 999999; break;
+      }
+
+      const p1A = pathDist(1);
+      const p2A = pathDist(2);
+      // Penalise moves that leave Red's own groups exposed to capture next turn
+      const vuln = tagEndThreatScore(1, 2);
+      restoreState(s);
+
+      const score = (p2B - p2A) * advW + (p1A - p1B) * blockW
+                  + cap * 12 - vuln * 6 + Math.random() * 0.8;
+      if (score > best) { best = score; chosen = m; }
+    }
+
+  // ── Hard ─────────────────────────────────────────────────────────────────────
+  // Path-priority pre-filter + capture-threat + defensive moves → full
+  // simulation → path-distance + capture-setup scoring + vulnerability penalty
+  // → 2-ply opponent-response penalty.
+  } else {
+    const p1B = pathDist(1);
+    const p2B = pathDist(2);
+
+    // Dynamic urgency: escalate sharply when either player nears their win edge
+    const blockW   = p1B <= 2 ? 14 : p1B <= 5 ? 8 : p1B <= 9 ? 5 : 3;
+    const advanceW = p2B <= 2 ? 14 : p2B <= 5 ? 8 : p2B <= 9 ? 5 : 2;
+
+    // Candidate pool: path-priority + capture-threat + defensive coverage
+    const pathCands    = topMovesByPriority(moves, Math.min(100, moves.length));
+    const captureCands = getCaptureThreatMoves(moves, 1, 30);
+    const defenseCands = getDefensiveTagEndMoves(moves, 2, 20);
+    const candSet = new Set(pathCands);
+    for (const m of captureCands) candSet.add(m);
+    for (const m of defenseCands) candSet.add(m);
+    const candidates = [...candSet];
+
+    // Pre-compute Blue's top moves once so we can estimate Blue's counter
+    // for every AI candidate without re-enumerating each time.
+    const blueMovesPre = getAllMoves(1);
+    const blueTopPre   = topMovesByPriority(blueMovesPre, Math.min(40, blueMovesPre.length));
+
+    let bestScore = -Infinity;
+    for (const m of candidates) {
+      const s = saveState();
+      const cap = simAiMove(m);
+
+      // Immediate win → take it, skip all further evaluation
+      if (getWin(2)) {
+        restoreState(s); chosen = m; bestScore = 999999; break;
+      }
+
+      // Full distance matrices — reused for 1-ply scoring and 2-ply estimation
+      const d1A = pathDistFull(1);
+      const d2A = pathDistFull(2);
+      let p1A = 9999; for (let c2 = 0; c2 < N; c2++) p1A = Math.min(p1A, d1A[N-1][c2]);
+      let p2A = 9999; for (let r2 = 0; r2 < N; r2++) p2A = Math.min(p2A, d2A[r2][N-1]);
+
+      // Capture-setup value (AI partially covers Blue's tag ends)
+      const threat = tagEndThreatScore(2, 1);
+      // Vulnerability penalty (Blue partially covers Red's tag ends after this move)
+      const vuln   = tagEndThreatScore(1, 2);
+
+      // 1-ply score
+      const score1 = (p2B - p2A) * advanceW
+                   + (p1A - p1B) * blockW
+                   + cap * 20
+                   + threat * 5
+                   - vuln * 8;
+
+      // 2-ply: estimate Blue's best counter and subtract as penalty so the
+      // AI prefers moves that also limit Blue's counter-play.
+      let bestBlueReply = 0;
+      for (const bm of blueTopPre) {
+        let valid = true;
+        for (const [br, bc] of bm.sqs) {
+          if (board[br][bc] !== 0) { valid = false; break; }
+        }
+        if (!valid) continue;
+        let bmScore = 0;
+        for (const [br, bc] of bm.sqs) {
+          bmScore += Math.max(0, N - (d1A[br][bc] >= 9999 ? N : d1A[br][bc]))
+                  +  Math.max(0, N - (d2A[br][bc] >= 9999 ? N : d2A[br][bc]));
+        }
+        if (bmScore > bestBlueReply) bestBlueReply = bmScore;
+      }
+
+      // Final score: penalise by 45 % of Blue's best counter-move potential
+      const finalScore = score1 - bestBlueReply * 0.45 + Math.random() * 0.2;
+
+      if (finalScore > bestScore) { bestScore = finalScore; chosen = m; }
+
+      restoreState(s);
+    }
+  }
+
+  applyAiMove(chosen);
+}
+
+// ─── AI — Trigger ─────────────────────────────────────────────────────────────
+function triggerAi() {
+  if (gameMode !== 'pvc' || cur !== 2 || gameOver) return;
+  aiThinking = true;
+  setStatus();
+  refreshPanels();
+  drawBoard();
+  const delay = aiDiff === 'hard' ? 1200 : aiDiff === 'medium' ? 550 : 300;
+  setTimeout(doAiMove, delay);
+}
+
+// ─── Tutorial ─────────────────────────────────────────────────────────────────
+function openTutorial() {
+  document.getElementById('tutorial-overlay').style.display = 'flex';
+  drawCaptureDiagram();
+}
+
+function closeTutorial() {
+  document.getElementById('tutorial-overlay').style.display = 'none';
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeTutorial();
+});
+
+function drawCaptureDiagram() {
+  const cnv = document.getElementById('capture-diagram');
+  const DC   = 22;          // cell size in px
+  const DR   = 5;           // diagram rows
+  const DCOL = 7;           // diagram cols
+  const PW   = DCOL * DC;   // panel width  = 154
+  const PH   = DR   * DC;   // panel height = 110
+  const GAP  = 40;          // gap between panels (holds arrow)
+  const LABT = 24;          // space above panels for title
+  const LABB = 40;          // space below for sub-labels
+  const W    = PW * 3 + GAP * 2;
+  const H    = LABT + PH + LABB;
+
+  cnv.width  = W;
+  cnv.height = H;
+  const dc = cnv.getContext('2d');
+
+  // Colors
+  const RC = '#e74c3c';          // red piece
+  const BC = '#3a7bd5';          // blue piece
+  const GC = '#ffc800';          // gold tag end
+  const EC = '#13132a';          // empty cell
+  const GD = '#202038';          // grid line
+
+  // Example: straight horizontal red group at row 2, cols 2-4
+  const redGroup = [[2,2],[2,3],[2,4]];
+  // Tag ends: cell just beyond each tip
+  const tagEnds  = [[2,1],[2,5]];
+
+  function isIn(arr, r, c) { return arr.some(([rr,cc]) => rr===r && cc===c); }
+
+  function drawPanel(ox, step) {
+    // step 1 = red group only
+    // step 2 = red group + tag end highlights
+    // step 3 = blue on tag ends, red group captured/removed
+
+    // Background fill
+    dc.fillStyle = '#0d0d1e';
+    dc.fillRect(ox, LABT, PW, PH);
+
+    // Cells
+    for (let r = 0; r < DR; r++) {
+      for (let c = 0; c < DCOL; c++) {
+        const x = ox + c * DC + 1;
+        const y = LABT + r * DC + 1;
+        const w = DC - 2, h = DC - 2;
+        const isRed = isIn(redGroup, r, c);
+        const isTag = isIn(tagEnds, r, c);
+
+        let fill = EC;
+        if (step === 3 && isTag)       fill = BC;   // blue covers tag ends
+        else if (step === 3 && isRed)  fill = EC;   // red captured → empty
+        else if (isRed)                fill = RC;
+
+        dc.fillStyle = fill;
+        dc.fillRect(x, y, w, h);
+
+        // Gold tag-end overlay (steps 2 only)
+        if (step === 2 && isTag) {
+          dc.fillStyle = 'rgba(255,200,0,0.22)';
+          dc.fillRect(x, y, w, h);
+          dc.strokeStyle = GC;
+          dc.lineWidth = 2;
+          dc.strokeRect(x + 1.5, y + 1.5, w - 3, h - 3);
+          // "TE" label
+          dc.font = 'bold 8px Segoe UI, Arial';
+          dc.textAlign = 'center';
+          dc.textBaseline = 'middle';
+          dc.fillStyle = GC;
+          dc.fillText('TE', ox + c * DC + DC / 2, LABT + r * DC + DC / 2);
+        }
+
+        // Dot on the tip cells of red group in step 2
+        if (step === 2 && isRed) {
+          const isTip = (c === 2 || c === 4) && r === 2; // leftmost / rightmost
+          if (isTip) {
+            dc.fillStyle = 'rgba(255,255,255,0.50)';
+            dc.beginPath();
+            dc.arc(ox + c * DC + DC / 2, LABT + r * DC + DC / 2, 3, 0, Math.PI * 2);
+            dc.fill();
+          }
+        }
+      }
+    }
+
+    // Grid lines
+    dc.strokeStyle = GD;
+    dc.lineWidth = 0.5;
+    for (let r = 0; r <= DR; r++) {
+      dc.beginPath();
+      dc.moveTo(ox, LABT + r * DC);
+      dc.lineTo(ox + PW, LABT + r * DC);
+      dc.stroke();
+    }
+    for (let c = 0; c <= DCOL; c++) {
+      dc.beginPath();
+      dc.moveTo(ox + c * DC, LABT);
+      dc.lineTo(ox + c * DC, LABT + PH);
+      dc.stroke();
+    }
+
+    // Panel border
+    dc.strokeStyle = '#2a2a4a';
+    dc.lineWidth = 1;
+    dc.strokeRect(ox, LABT, PW, PH);
+  }
+
+  function panelTitle(ox, text, color) {
+    dc.font = 'bold 10px Segoe UI, Arial';
+    dc.textAlign = 'center';
+    dc.textBaseline = 'middle';
+    dc.fillStyle = color || '#9090c0';
+    dc.fillText(text, ox + PW / 2, LABT / 2);
+  }
+
+  function panelSub(ox, lines, color) {
+    dc.font = '9px Segoe UI, Arial';
+    dc.textAlign = 'center';
+    dc.textBaseline = 'top';
+    dc.fillStyle = color || '#666688';
+    lines.forEach((ln, i) => {
+      dc.fillText(ln, ox + PW / 2, LABT + PH + 5 + i * 13);
+    });
+  }
+
+  function drawArrow(x, y) {
+    dc.font = 'bold 15px Arial';
+    dc.textAlign = 'center';
+    dc.textBaseline = 'middle';
+    dc.fillStyle = '#3a3a5a';
+    dc.fillText('▶', x, y);
+  }
+
+  // Background
+  dc.fillStyle = '#0a0a18';
+  dc.fillRect(0, 0, W, H);
+
+  const p1 = 0, p2 = PW + GAP, p3 = PW * 2 + GAP * 2;
+
+  drawPanel(p1, 1);
+  panelTitle(p1, '1 · Red Group', RC);
+  panelSub(p1, ['Red pieces form a', 'connected group']);
+
+  drawPanel(p2, 2);
+  panelTitle(p2, '2 · Tag Ends', GC);
+  panelSub(p2, ['Cells beyond each tip', '(white dot) are tag ends'], '#aa8800');
+
+  drawPanel(p3, 3);
+  panelTitle(p3, '3 · Capture!', BC);
+  panelSub(p3, ['Blue covers both tag ends', '→ Red group is captured!'], BC);
+
+  drawArrow(p1 + PW + GAP / 2, LABT + PH / 2);
+  drawArrow(p2 + PW + GAP / 2, LABT + PH / 2);
+}
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+resetState();
+refreshModeUI();
+setStatus();
+buildPanels();
+refreshPanels();
+drawBoard();
+</script>
+</body>
+</html>
