@@ -435,6 +435,7 @@ const DEFS = [
 
 // ─── Game State ───────────────────────────────────────────────────────────────
 let board, pieceBoard, placements, cur, hand, selId, rot, flp, hR, hC, gameOver, passStreak, captures;
+let dragTouchId = null;
 let winCells = null, winPlayer = 0;
 let captureAnim = null, animFrameId = null;
 const FLASH_MS = 1950, SLIDE_MS = 700;
@@ -462,6 +463,7 @@ function resetState() {
   winCells   = null;
   winPlayer  = 0;
   captureAnim = null;
+  dragTouchId = null;
 }
 
 // ─── Piece Transforms ─────────────────────────────────────────────────────────
@@ -787,14 +789,17 @@ function buildPanels() {
       const badge = document.createElement('span');
       badge.className = 'piece-count';
       btn.appendChild(badge);
-      let _btnMoved = false;
-      btn.addEventListener('touchstart', () => { _btnMoved = false; }, { passive: true });
-      btn.addEventListener('touchmove',  () => { _btnMoved = true;  }, { passive: true });
-      btn.addEventListener('touchend', e => {
-        if (_btnMoved) return;
-        e.preventDefault();
-        onPieceClick(p, def.id);
-      });
+      btn.addEventListener('touchstart', e => {
+        if (gameOver || aiThinking || p !== cur) return;
+        if (gameMode === 'pvc' && p === 2) return;
+        if (hand[p].filter(x => x === def.id).length === 0) return;
+        dragTouchId = e.changedTouches[0].identifier;
+        selId = def.id;
+        rot = 0; flp = false;
+        hR = -1; hC = -1;
+        refreshPanels();
+        drawBoard();
+      }, { passive: true });
       btn.addEventListener('click', () => onPieceClick(p, def.id));
       cont.appendChild(btn);
     }
@@ -843,6 +848,43 @@ function switchTab(p) {
   document.getElementById('p2-section').classList.toggle('active-turn', p === 2);
 }
 
+// ─── Placement Commit ─────────────────────────────────────────────────────────
+function commitPlacement() {
+  if (!selId || hR < 0) return;
+  const [aR, aC] = getAnchor(selId, rot, flp, hR, hC);
+  const sqs = getSquares(selId, rot, flp, aR, aC);
+  hR = hC = -1;
+  dragTouchId = null;
+  if (!canPlace(sqs)) { drawBoard(); return; }
+
+  const pidx = placements.length;
+  placements.push({ player: cur, pieceId: selId });
+  doPlace(sqs, cur, pidx);
+  const hi = hand[cur].indexOf(selId);
+  if (hi !== -1) hand[cur].splice(hi, 1);
+  selId = null; rot = 0; flp = false;
+  passStreak = 0;
+
+  const capResult = checkCaptures(cur, cur === 1 ? 2 : 1);
+  const afterCaptures = () => {
+    if (capResult.total > 0) { captures[cur] += capResult.total; refreshScores(); }
+    const winDir = getWin(cur);
+    if (winDir) { aiThinking = false; showWin(cur, winDir); return; }
+    cur = cur === 1 ? 2 : 1;
+    aiThinking = false;
+    switchTab(cur);
+    setStatus(); refreshPanels(); drawBoard();
+    triggerAi();
+  };
+  if (capResult.events.length > 0) {
+    aiThinking = true;
+    setStatus(); refreshPanels(); drawBoard();
+    startCaptureAnim(capResult.events, cur, afterCaptures);
+  } else {
+    afterCaptures();
+  }
+}
+
 // ─── Touch Helpers ────────────────────────────────────────────────────────────
 function getTouchCell(touch) {
   const rect  = canvas.getBoundingClientRect();
@@ -873,43 +915,43 @@ canvas.addEventListener('touchmove', e => {
 
 canvas.addEventListener('touchend', e => {
   e.preventDefault();
+  if (dragTouchId !== null) return; // handled by document-level touchend
   if (gameOver || !selId || aiThinking || hR < 0) return;
   if (gameMode === 'pvc' && cur === 2) return;
+  commitPlacement();
+}, { passive: false });
 
-  const [aR, aC] = getAnchor(selId, rot, flp, hR, hC);
-  const sqs = getSquares(selId, rot, flp, aR, aC);
-  hR = hC = -1;
-  if (!canPlace(sqs)) { drawBoard(); return; }
-
-  const pidx = placements.length;
-  placements.push({ player: cur, pieceId: selId });
-  doPlace(sqs, cur, pidx);
-  const hi = hand[cur].indexOf(selId);
-  if (hi !== -1) hand[cur].splice(hi, 1);
-  selId = null; rot = 0; flp = false;
-  passStreak = 0;
-
-  const capResult = checkCaptures(cur, cur === 1 ? 2 : 1);
-
-  const afterCaptures = () => {
-    if (capResult.total > 0) { captures[cur] += capResult.total; refreshScores(); }
-    const winDir = getWin(cur);
-    if (winDir) { aiThinking = false; showWin(cur, winDir); return; }
-    cur = cur === 1 ? 2 : 1;
-    aiThinking = false;
-    switchTab(cur);
-    setStatus(); refreshPanels(); drawBoard();
-    triggerAi();
-  };
-
-  if (capResult.events.length > 0) {
-    aiThinking = true;
-    setStatus(); refreshPanels(); drawBoard();
-    startCaptureAnim(capResult.events, cur, afterCaptures);
-  } else {
-    afterCaptures();
+// ─── Document-level Drag (piece panel → board) ────────────────────────────────
+document.addEventListener('touchmove', e => {
+  if (dragTouchId === null || !selId || gameOver || aiThinking) return;
+  const touch = Array.from(e.touches).find(t => t.identifier === dragTouchId);
+  if (!touch) return;
+  const rect = canvas.getBoundingClientRect();
+  if (touch.clientX >= rect.left && touch.clientX <= rect.right &&
+      touch.clientY >= rect.top  && touch.clientY <= rect.bottom) {
+    e.preventDefault();
+    const [r, c] = getTouchCell(touch);
+    if (r >= 0 && r < N && c >= 0 && c < N) { hR = r; hC = c; drawBoard(); }
   }
 }, { passive: false });
+
+document.addEventListener('touchend', e => {
+  if (dragTouchId === null) return;
+  const touch = Array.from(e.changedTouches).find(t => t.identifier === dragTouchId);
+  if (!touch) return;
+  dragTouchId = null;
+  if (gameOver || !selId || aiThinking) { hR = hC = -1; drawBoard(); return; }
+  if (gameMode === 'pvc' && cur === 2) { hR = hC = -1; drawBoard(); return; }
+  const rect = canvas.getBoundingClientRect();
+  const overCanvas = touch.clientX >= rect.left && touch.clientX <= rect.right &&
+                     touch.clientY >= rect.top  && touch.clientY <= rect.bottom;
+  if (overCanvas && hR >= 0) {
+    commitPlacement();
+  } else {
+    hR = hC = -1;
+    drawBoard();
+  }
+});
 
 // ─── Mouse Events (desktop/testing fallback) ──────────────────────────────────
 canvas.addEventListener('mousemove', e => {
