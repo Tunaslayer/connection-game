@@ -788,6 +788,14 @@ function buildPanels() {
       const badge = document.createElement('span');
       badge.className = 'piece-count';
       btn.appendChild(badge);
+      let _btnMoved = false;
+      btn.addEventListener('touchstart', () => { _btnMoved = false; }, { passive: true });
+      btn.addEventListener('touchmove',  () => { _btnMoved = true;  }, { passive: true });
+      btn.addEventListener('touchend', e => {
+        if (_btnMoved) return;
+        e.preventDefault();
+        onPieceClick(p, def.id);
+      });
       btn.addEventListener('click', () => onPieceClick(p, def.id));
       cont.appendChild(btn);
     }
@@ -850,17 +858,17 @@ function getTouchCell(touch) {
 
 // ─── Touch Events ─────────────────────────────────────────────────────────────
 canvas.addEventListener('touchstart', e => {
-  e.preventDefault();
   if (!selId || gameOver || aiThinking) return;
   if (gameMode === 'pvc' && cur === 2) return;
+  e.preventDefault();
   const [r, c] = getTouchCell(e.touches[0]);
   if (r >= 0 && r < N && c >= 0 && c < N) { hR = r; hC = c; }
   drawBoard();
 }, { passive: false });
 
 canvas.addEventListener('touchmove', e => {
-  e.preventDefault();
   if (!selId) return;
+  e.preventDefault();
   const [r, c] = getTouchCell(e.touches[0]);
   if (r >= 0 && r < N && c >= 0 && c < N) { hR = r; hC = c; }
   drawBoard();
