@@ -409,6 +409,7 @@ const P2CL = 'rgba(231,76,60,0.52)';
 const CBAD = 'rgba(255,50,50,0.38)';
 const CEMPTY = '#13132a';
 const CGRID  = '#202038';
+const TOUCH_ROW_OFFSET = 3; // cells above finger so preview isn't hidden by thumb
 
 // ─── Piece Definitions ────────────────────────────────────────────────────────
 const DEFS = [
@@ -886,11 +887,11 @@ function commitPlacement() {
 }
 
 // ─── Touch Helpers ────────────────────────────────────────────────────────────
-function getTouchCell(touch) {
+function getTouchCell(touch, rowOffset = 0) {
   const rect  = canvas.getBoundingClientRect();
   const scaleX = SZ / rect.width;
   const scaleY = SZ / rect.height;
-  const r = Math.floor((touch.clientY - rect.top)  * scaleY / CS);
+  const r = Math.floor((touch.clientY - rect.top)  * scaleY / CS) - rowOffset;
   const c = Math.floor((touch.clientX - rect.left) * scaleX / CS);
   return [r, c];
 }
@@ -900,7 +901,7 @@ canvas.addEventListener('touchstart', e => {
   if (!selId || gameOver || aiThinking) return;
   if (gameMode === 'pvc' && cur === 2) return;
   e.preventDefault();
-  const [r, c] = getTouchCell(e.touches[0]);
+  const [r, c] = getTouchCell(e.touches[0], TOUCH_ROW_OFFSET);
   if (r >= 0 && r < N && c >= 0 && c < N) { hR = r; hC = c; }
   drawBoard();
 }, { passive: false });
@@ -908,7 +909,7 @@ canvas.addEventListener('touchstart', e => {
 canvas.addEventListener('touchmove', e => {
   if (!selId) return;
   e.preventDefault();
-  const [r, c] = getTouchCell(e.touches[0]);
+  const [r, c] = getTouchCell(e.touches[0], TOUCH_ROW_OFFSET);
   if (r >= 0 && r < N && c >= 0 && c < N) { hR = r; hC = c; }
   drawBoard();
 }, { passive: false });
@@ -930,7 +931,7 @@ document.addEventListener('touchmove', e => {
   if (touch.clientX >= rect.left && touch.clientX <= rect.right &&
       touch.clientY >= rect.top  && touch.clientY <= rect.bottom) {
     e.preventDefault();
-    const [r, c] = getTouchCell(touch);
+    const [r, c] = getTouchCell(touch, TOUCH_ROW_OFFSET);
     if (r >= 0 && r < N && c >= 0 && c < N) { hR = r; hC = c; drawBoard(); }
   }
 }, { passive: false });
