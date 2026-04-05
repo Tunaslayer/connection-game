@@ -334,6 +334,8 @@ h1 {
       <button class="ctrl-btn" id="btn-rotate">&#8635; Rotate &nbsp;[R]</button>
       <button class="ctrl-btn" id="btn-flip">&#8644; Flip &nbsp;[F]</button>
       <button class="ctrl-btn" id="btn-pass">&#9197; Pass Turn</button>
+      <button class="ctrl-btn" id="btn-continue" style="display:none" onclick="continueCapture()">&#9654; Continue</button>
+      <button class="ctrl-btn" id="btn-showpieces" onclick="togglePieceIds()">&#128065; Show Pieces</button>
       <button class="ctrl-btn" id="btn-howto" onclick="openTutorial()">&#9432; How to Play</button>
     </div>
   </div>
@@ -373,7 +375,7 @@ h1 {
 
       <div class="tut-section">
         <h3>Pieces</h3>
-        <p>Each player holds all 19 tetrominoes and pentominoes. Click a piece in your panel to select it, then click the board to place it. Press <strong>R</strong> to rotate and <strong>F</strong> to flip before placing. Captured pieces return to your hand, so you can place them again.</p>
+        <p>Each player holds all 19 pieces (5 tetrominoes and 14 pentominoes). The two 2×2 square pieces have no tag ends and cannot be captured. Click a piece in your panel to select it, then click the board to place it. Press <strong>R</strong> to rotate and <strong>F</strong> to flip before placing. Captured pieces return to your hand, so you can place them again.</p>
       </div>
 
       <div class="tut-section">
@@ -423,7 +425,7 @@ const DEFS = [
   { id:'I5',   sq:[[0,0],[0,1],[0,2],[0,3],[0,4]] },
   { id:'L5',   sq:[[0,0],[1,0],[2,0],[3,0],[3,1]] },
   { id:'N5',   sq:[[0,1],[1,0],[1,1],[2,0],[3,0]] },
-  { id:'P5',   sq:[[0,0],[0,1],[1,0],[1,1],[2,0]] },
+  { id:'O4b',  sq:[[0,0],[0,1],[1,0],[1,1]] },
   { id:'T5',   sq:[[0,0],[0,1],[0,2],[1,1],[2,1]] },
   { id:'U5',   sq:[[0,0],[0,2],[1,0],[1,1],[1,2]] },
   { id:'V5',   sq:[[0,0],[1,0],[2,0],[2,1],[2,2]] },
@@ -436,7 +438,8 @@ const DEFS = [
 // ─── Game State ───────────────────────────────────────────────────────────────
 let board, pieceBoard, placements, cur, hand, selId, rot, flp, hR, hC, gameOver, passStreak, captures;
 let winCells = null, winPlayer = 0;
-let captureAnim = null, animFrameId = null;
+let captureAnim = null, animFrameId = null, captureWaiting = false;
+let showPieceIds = false;
 const FLASH_MS = 1950, SLIDE_MS = 700;
 
 // ─── Mode / AI State ──────────────────────────────────────────────────────────
@@ -462,6 +465,8 @@ function resetState() {
   winCells   = null;
   winPlayer  = 0;
   captureAnim = null;
+  captureWaiting = false;
+  document.getElementById('btn-continue').style.display = 'none';
 }
 
 // ─── Piece Transforms ─────────────────────────────────────────────────────────
@@ -503,6 +508,21 @@ function doPlace(sqs, player, pidx) {
 }
 
 // ─── Capture (tag-end rule) ───────────────────────────────────────────────────
+// Returns a Map of pidx → [[r,c],...] for every placement of `player` still on board.
+function getPieceMap(player) {
+  const map = new Map();
+  for (let r = 0; r < N; r++) {
+    for (let c = 0; c < N; c++) {
+      if (board[r][c] !== player) continue;
+      const pidx = pieceBoard[r][c];
+      if (pidx < 0) continue;
+      if (!map.has(pidx)) map.set(pidx, []);
+      map.get(pidx).push([r, c]);
+    }
+  }
+  return map;
+}
+
 function getTagEnds(group) {
   const cellSet = new Set(group.map(([r,c]) => r * N + c));
   const D = [[1,0],[-1,0],[0,1],[0,-1]];
@@ -521,14 +541,15 @@ function getTagEnds(group) {
   return tagEnds;
 }
 
-function checkCaptures(attacker, opponent) {
+// Returns all orthogonally-connected groups of `player` cells on the board.
+// Touching pieces of the same player merge into one group for capture purposes.
+function getConnectedGroups(player) {
   const vis = Array.from({length:N}, () => new Uint8Array(N));
-  let total = 0;
-  const events = [];
   const D = [[1,0],[-1,0],[0,1],[0,-1]];
+  const groups = [];
   for (let r = 0; r < N; r++) {
     for (let c = 0; c < N; c++) {
-      if (board[r][c] !== opponent || vis[r][c]) continue;
+      if (board[r][c] !== player || vis[r][c]) continue;
       const group = [], q = [[r, c]];
       vis[r][c] = 1;
       for (let i = 0; i < q.length; i++) {
@@ -536,21 +557,31 @@ function checkCaptures(attacker, opponent) {
         group.push([gr, gc]);
         for (const [dr, dc] of D) {
           const nr = gr+dr, nc = gc+dc;
-          if (nr >= 0 && nr < N && nc >= 0 && nc < N &&
-              board[nr][nc] === opponent && !vis[nr][nc]) {
+          if (nr>=0&&nr<N&&nc>=0&&nc<N&&board[nr][nc]===player&&!vis[nr][nc]) {
             vis[nr][nc] = 1; q.push([nr, nc]);
           }
         }
       }
-      const tagEnds = getTagEnds(group);
-      if (tagEnds.length > 0 &&
-          tagEnds.every(([tr, tc]) => board[tr][tc] === attacker)) {
-        events.push({ group: [...group], tagEnds: [...tagEnds] });
-        const capturedPidxs = new Set(group.map(([gr,gc]) => pieceBoard[gr][gc]));
-        for (const [gr, gc] of group) { board[gr][gc] = 0; pieceBoard[gr][gc] = -1; total++; }
-        for (const pidx of capturedPidxs)
-          if (pidx >= 0) hand[attacker].push(placements[pidx].pieceId);
-      }
+      groups.push(group);
+    }
+  }
+  return groups;
+}
+
+function checkCaptures(attacker, opponent) {
+  let total = 0;
+  const events = [];
+  // Touching same-player pieces merge into one connected group.
+  // All in-bounds tag ends of the group must be covered by the attacker.
+  for (const group of getConnectedGroups(opponent)) {
+    const tagEnds = getTagEnds(group);
+    if (tagEnds.length > 0 &&
+        tagEnds.every(([tr, tc]) => board[tr][tc] === attacker)) {
+      events.push({ group: [...group], tagEnds: [...tagEnds] });
+      const capturedPidxs = new Set(group.map(([gr,gc]) => pieceBoard[gr][gc]));
+      for (const [gr, gc] of group) { board[gr][gc] = 0; pieceBoard[gr][gc] = -1; total++; }
+      for (const pidx of capturedPidxs)
+        if (pidx >= 0) hand[attacker].push(placements[pidx].pieceId);
     }
   }
   return { total, events };
@@ -621,6 +652,57 @@ function getWinCells(p, dir) {
   return [];
 }
 
+function togglePieceIds() {
+  showPieceIds = !showPieceIds;
+  const btn = document.getElementById('btn-showpieces');
+  btn.textContent = showPieceIds ? '🙈 Hide Pieces' : '👁 Show Pieces';
+  btn.style.borderColor = showPieceIds ? '#aaaaff' : '';
+  drawBoard();
+}
+
+function drawPieceOverlay() {
+  // For each placement still on the board, draw a distinct hue overlay
+  // and a small number so pieces can be identified individually.
+  const seen = new Map(); // pidx -> centroid for label
+  for (let r = 0; r < N; r++) {
+    for (let c = 0; c < N; c++) {
+      const pidx = pieceBoard[r][c];
+      if (pidx < 0 || board[r][c] === 0) continue;
+      const hue = (pidx * 137) % 360;  // golden-ratio spread for distinct colours
+      ctx.fillStyle = `hsla(${hue},90%,65%,0.30)`;
+      ctx.fillRect(c * CS + 1, r * CS + 1, CS - 2, CS - 2);
+      ctx.strokeStyle = `hsla(${hue},90%,75%,0.90)`;
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(c * CS + 2, r * CS + 2, CS - 4, CS - 4);
+      if (!seen.has(pidx)) seen.set(pidx, { r: 0, c: 0, n: 0 });
+      const s = seen.get(pidx);
+      s.r += r; s.c += c; s.n++;
+    }
+  }
+  // Draw piece index label at centroid of each placement
+  ctx.font = `bold ${Math.max(8, CS - 14)}px Segoe UI`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  for (const [pidx, s] of seen) {
+    const cr = s.r / s.n, cc = s.c / s.n;
+    const hue = (pidx * 137) % 360;
+    ctx.fillStyle = `hsla(${hue},90%,90%,0.95)`;
+    ctx.fillText(pidx, cc * CS + CS / 2, cr * CS + CS / 2);
+  }
+
+  // Draw connected-group tag ends as gold rings — these are the cells that must
+  // be covered by the opponent to capture the group.
+  for (let player = 1; player <= 2; player++) {
+    for (const group of getConnectedGroups(player)) {
+      for (const [tr, tc] of getTagEnds(group)) {
+        ctx.strokeStyle = 'rgba(255,210,0,0.90)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(tc * CS + 3, tr * CS + 3, CS - 6, CS - 6);
+      }
+    }
+  }
+}
+
 // ─── Canvas ───────────────────────────────────────────────────────────────────
 const canvas = document.getElementById('board-canvas');
 canvas.width = canvas.height = SZ;
@@ -688,6 +770,8 @@ function drawBoard() {
   ctx.fillText('► RED ►', 0, 0);
   ctx.restore();
 
+  if (showPieceIds) drawPieceOverlay();
+
   drawCaptureAnim();
 
   ctx.strokeStyle = '#3a3a6a';
@@ -712,8 +796,20 @@ function drawCaptureAnim() {
   const elapsed = performance.now() - captureAnim.startTime;
   const { events, attacker, onComplete } = captureAnim;
 
-  if (elapsed >= FLASH_MS + SLIDE_MS) {
+  // Easy mode: pause after flash so player can study the tag ends before pieces leave
+  if ((aiDiff === 'easy' || aiDiff === 'medium') && gameMode === 'pvc' && elapsed >= FLASH_MS && !captureAnim.pauseDone) {
+    captureAnim.pauseDone = true;
+    captureWaiting = true;
+    document.getElementById('btn-continue').style.display = '';
+    const el = document.getElementById('status');
+    el.innerHTML = 'Gold cells are tag ends &mdash; click <b>Continue</b> to proceed';
+    el.className = 'think-bg';
+  }
+
+  if (!captureWaiting && elapsed >= FLASH_MS + SLIDE_MS) {
     captureAnim = null;
+    captureWaiting = false;
+    document.getElementById('btn-continue').style.display = 'none';
     onComplete();
     return;
   }
@@ -721,9 +817,12 @@ function drawCaptureAnim() {
   const capColor  = attacker === 1 ? P2C : P1C;   // captured = opponent's colour
   const slideDir  = attacker === 1 ? -1 : 1;       // left → P1 panel, right → P2 panel
 
-  if (elapsed < FLASH_MS) {
+  // While waiting for Continue, freeze display at end of flash phase
+  const drawElapsed = captureWaiting ? FLASH_MS - 50 : elapsed;
+
+  if (drawElapsed < FLASH_MS) {
     // ── Flash phase: tag ends glow gold, captured cells flash white ──────────
-    const pulse = 0.5 + 0.5 * Math.sin((elapsed / FLASH_MS) * Math.PI * 5);
+    const pulse = 0.5 + 0.5 * Math.sin((drawElapsed / FLASH_MS) * Math.PI * 5);
 
     for (const ev of events) {
       // Redraw captured cells (already removed from board)
@@ -747,7 +846,7 @@ function drawCaptureAnim() {
     }
   } else {
     // ── Slide phase: captured cells fly off toward capturing player's panel ──
-    const t      = (elapsed - FLASH_MS) / SLIDE_MS;
+    const t      = (drawElapsed - FLASH_MS) / SLIDE_MS;
     const eased  = t * t;                    // ease-in (accelerates off screen)
     const offsetX = slideDir * SZ * eased;
     const alpha  = 1 - eased;
@@ -761,6 +860,14 @@ function drawCaptureAnim() {
         ctx.fillRect(c * CS + 1, r * CS + 1, CS - 2, CS - 2);
     ctx.restore();
   }
+}
+
+function continueCapture() {
+  if (!captureWaiting || !captureAnim) return;
+  captureWaiting = false;
+  document.getElementById('btn-continue').style.display = 'none';
+  // Reset startTime so the slide phase begins now
+  captureAnim.startTime = performance.now() - FLASH_MS;
 }
 
 // ─── Mini Piece Renderer ──────────────────────────────────────────────────────
@@ -1136,31 +1243,13 @@ function topMovesByPriority(moves, count) {
 }
 
 // ─── AI — Capture-threat moves ────────────────────────────────────────────────
-// Returns moves that cover at least one empty tag-end of an opponent group.
+// Returns moves that cover at least one empty tag-end of an opponent placement.
 // These capture-setup moves may be missed by the path-distance pre-filter alone.
 function getCaptureThreatMoves(moves, opponent, maxCount) {
   const tagEndCells = new Set();
-  const vis = Array.from({length:N}, () => new Uint8Array(N));
-  const D = [[1,0],[-1,0],[0,1],[0,-1]];
-  for (let r = 0; r < N; r++) {
-    for (let c = 0; c < N; c++) {
-      if (board[r][c] !== opponent || vis[r][c]) continue;
-      const group = [], q = [[r, c]];
-      vis[r][c] = 1;
-      for (let i = 0; i < q.length; i++) {
-        const [gr, gc] = q[i];
-        group.push([gr, gc]);
-        for (const [dr, dc] of D) {
-          const nr = gr+dr, nc = gc+dc;
-          if (nr>=0&&nr<N&&nc>=0&&nc<N&&board[nr][nc]===opponent&&!vis[nr][nc]) {
-            vis[nr][nc] = 1; q.push([nr, nc]);
-          }
-        }
-      }
-      for (const [tr, tc] of getTagEnds(group))
-        if (board[tr][tc] === 0) tagEndCells.add(tr * N + tc);
-    }
-  }
+  for (const group of getConnectedGroups(opponent))
+    for (const [tr, tc] of getTagEnds(group))
+      if (board[tr][tc] === 0) tagEndCells.add(tr * N + tc);
   if (!tagEndCells.size) return [];
   const scored = [];
   for (const m of moves) {
@@ -1173,68 +1262,34 @@ function getCaptureThreatMoves(moves, opponent, maxCount) {
 
 // ─── AI — Tag-end threat scoring ──────────────────────────────────────────────
 // After a placement, score how many opponent tag ends the attacker now partially
-// covers (partial coverage = capture setup; higher group size = more valuable).
+// covers (partial coverage = capture setup; higher piece size = more valuable).
 function tagEndThreatScore(attacker, opponent) {
   let score = 0;
-  const vis = Array.from({length:N}, () => new Uint8Array(N));
-  const D = [[1,0],[-1,0],[0,1],[0,-1]];
-  for (let r = 0; r < N; r++) {
-    for (let c = 0; c < N; c++) {
-      if (board[r][c] !== opponent || vis[r][c]) continue;
-      const group = [], q = [[r, c]];
-      vis[r][c] = 1;
-      for (let i = 0; i < q.length; i++) {
-        const [gr, gc] = q[i];
-        group.push([gr, gc]);
-        for (const [dr, dc] of D) {
-          const nr = gr+dr, nc = gc+dc;
-          if (nr>=0&&nr<N&&nc>=0&&nc<N&&board[nr][nc]===opponent&&!vis[nr][nc]) {
-            vis[nr][nc] = 1; q.push([nr, nc]);
-          }
-        }
-      }
-      const tagEnds = getTagEnds(group);
-      if (!tagEnds.length) continue;
-      const covered = tagEnds.filter(([tr,tc]) => board[tr][tc] === attacker).length;
-      if (covered > 0 && covered < tagEnds.length)
-        score += covered * Math.ceil(group.length / 2);
-    }
+  for (const group of getConnectedGroups(opponent)) {
+    const tagEnds = getTagEnds(group);
+    if (!tagEnds.length) continue;
+    const covered = tagEnds.filter(([tr,tc]) => board[tr][tc] === attacker).length;
+    if (covered > 0 && covered < tagEnds.length)
+      score += covered * Math.ceil(group.length / 2);
   }
   return score;
 }
 
 // ─── AI — Defensive Tag-end Coverage ─────────────────────────────────────────
-// Finds moves that cover the EMPTY tag ends of the AI player's own groups
-// where the opponent already controls at least one tag end (i.e. the group is
+// Finds moves that cover the EMPTY tag ends of the AI player's own placements
+// where the opponent already controls at least one tag end (i.e. the piece is
 // in danger of being captured next turn).  These defensive moves may be ranked
 // poorly by the path-distance pre-filter alone.
 function getDefensiveTagEndMoves(moves, player, maxCount) {
   const opp = player === 1 ? 2 : 1;
   const urgentCells = new Set();
-  const vis = Array.from({length:N}, () => new Uint8Array(N));
-  const D = [[1,0],[-1,0],[0,1],[0,-1]];
-  for (let r = 0; r < N; r++) {
-    for (let c = 0; c < N; c++) {
-      if (board[r][c] !== player || vis[r][c]) continue;
-      const group = [], q = [[r, c]];
-      vis[r][c] = 1;
-      for (let i = 0; i < q.length; i++) {
-        const [gr, gc] = q[i];
-        group.push([gr, gc]);
-        for (const [dr, dc] of D) {
-          const nr = gr+dr, nc = gc+dc;
-          if (nr>=0&&nr<N&&nc>=0&&nc<N&&board[nr][nc]===player&&!vis[nr][nc]) {
-            vis[nr][nc] = 1; q.push([nr, nc]);
-          }
-        }
-      }
-      const tagEnds = getTagEnds(group);
-      if (!tagEnds.length) continue;
-      const oppCovered = tagEnds.filter(([tr,tc]) => board[tr][tc] === opp).length;
-      if (oppCovered > 0) {
-        for (const [tr,tc] of tagEnds)
-          if (board[tr][tc] === 0) urgentCells.add(tr * N + tc);
-      }
+  for (const group of getConnectedGroups(player)) {
+    const tagEnds = getTagEnds(group);
+    if (!tagEnds.length) continue;
+    const oppCovered = tagEnds.filter(([tr,tc]) => board[tr][tc] === opp).length;
+    if (oppCovered > 0) {
+      for (const [tr,tc] of tagEnds)
+        if (board[tr][tc] === 0) urgentCells.add(tr * N + tc);
     }
   }
   if (!urgentCells.size) return [];
@@ -1319,33 +1374,20 @@ function doAiMove() {
   }
 
   // ── Easy ─────────────────────────────────────────────────────────────────────
-  // Plays in the right strategic area but picks randomly enough to be beatable.
-  // Still checks for immediate wins and captures so it isn't obviously foolish.
+  // Picks randomly from all legal moves — only grabs an immediate win.
+  // No capture-seeking, no path scoring. Designed to be beatable by new players.
   if (aiDiff === 'easy') {
-    const topCands = topMovesByPriority(moves, Math.min(60, moves.length));
-
-    // Check for immediate wins first
-    for (const m of topCands) {
+    // Still take an immediate win if one is available
+    for (const m of moves) {
       const s = saveState(); simAiMove(m);
       const wins = getWin(2) !== null;
       restoreState(s);
       if (wins) { chosen = m; break; }
     }
 
-    // Then check for immediate captures
+    // Otherwise pick any legal move at random
     if (!chosen) {
-      let bestCap = 0;
-      for (const m of topCands) {
-        const s = saveState(); const cap = simAiMove(m); restoreState(s);
-        if (cap > bestCap) { bestCap = cap; chosen = m; }
-      }
-    }
-
-    // Otherwise random pick from the top half of priority-scored moves
-    if (!chosen) {
-      const pool = topMovesByPriority(moves, Math.min(Math.ceil(moves.length * 0.5), 80));
-      const cutoff = Math.max(1, Math.ceil(pool.length * 0.5));
-      chosen = pool[Math.floor(Math.random() * cutoff)];
+      chosen = moves[Math.floor(Math.random() * moves.length)];
     }
 
   // ── Medium ───────────────────────────────────────────────────────────────────
